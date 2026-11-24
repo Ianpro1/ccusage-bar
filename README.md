@@ -6,6 +6,13 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 
 ![The ccusage bar in the Claude desktop app, with Tally animating while Claude works](assets/ccusage-bar.gif)
 
+<details>
+<summary>Still screenshot</summary>
+
+![The ccusage bar: view prices in the header, tokens, cache hit, cache countdown and context on the top row, project share, model mix and today below](assets/ccusage-bar.png)
+
+</details>
+
 ## What it shows
 
 **Header:** **Session**, **Project** and **Last turn** switch the view, and each shows its cost: this session, this project folder, and your most recent message.
