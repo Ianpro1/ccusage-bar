@@ -4,11 +4,7 @@ A clean usage bar above the prompt in Claude Code, powered by [ccusage](https://
 
 It shows what your Claude Code sessions cost and how they use tokens, for this session, this project folder, or just the last turn, with a small animated character, Tally, that reacts to how full your context is.
 
-```
-(Tally)  ccusage ✓ All clear.                    Session · Project · Last turn  ↻
-         6.8M tokens   ◕ 94% cache hit   ◕ 48m cache   ◔ 31% context
-         S $3.11 session  ◔ 65% of project  ▬▬▬ Opus 92% · Sonnet 8%  $17.30 today  +$0.42 last turn
-```
+![The ccusage bar in the Claude desktop app, with Tally animating while Claude works](assets/ccusage-bar.gif)
 
 ## What it shows
 
@@ -18,7 +14,7 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 - **cache:** time left before the prompt cache expires (1 hour on subscriptions, 5 minutes on the API). Your next message after it runs out pays full price to re-read the conversation.
 - **context:** how full the context window is. Near 100%, Claude Code compacts the conversation.
 
-**Cost row**
+**Cost row** (open by default; the ▴ / ▾ arrow at the end of the header hides and shows it)
 - **S / P / L:** the cost of this session, this project folder, or the last turn.
 - **of project / sessions / of session:** this session's share of the project, the project's session count, or the last turn's share of the session.
 - **Model mix:** how the cost splits between Opus, Sonnet and Haiku.

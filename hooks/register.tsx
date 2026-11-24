@@ -7,6 +7,7 @@ const snapshot = atom({ plugin: 'ccusage-bar', key: 'snapshot' } as const, null)
 const isHidden = atom({ plugin: 'ccusage-bar', key: 'isHidden' } as const, false)
 const scope = atom({ plugin: 'ccusage-bar', key: 'scope' } as const, 'session' as 'session' | 'project' | 'turn')
 const lastTurn = atom({ plugin: 'ccusage-bar', key: 'lastTurn' } as const, null as LastTurn | null)
+const showCosts = atom({ plugin: 'ccusage-bar', key: 'costsOpen' } as const, true)
 
 const REFRESH_MS = 60_000
 
@@ -65,6 +66,7 @@ const mix = (models: ModelShare[]) => {
   if (total <= 0) return []
   return [...byFamily.entries()]
     .map(([name, cost]) => ({ name, pct: (cost / total) * 100 }))
+    .filter(p => p.pct >= 0.5) // a sliver like "Haiku 0%" is noise
     .sort((a, b) => b.pct - a.pct)
 }
 
@@ -376,6 +378,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = ui
     const Svg = 'Svg' in ui ? ui.Svg : null
     const view = await read($, scope)
+    const isCostsOpen = await read($, showCosts)
     const isProject = view === 'project'
     const isTurn = view === 'turn'
     const usage = await $.session.usage()
@@ -561,6 +564,15 @@ export const register: Register = on => {
               />,
             ])}
             <Button key="refresh" plain dimColor label="↻" onPress={() => refresh($)} />
+            {isTurn ? null : (
+            <Button
+              key="costs-toggle"
+              plain
+              dimColor
+              label={isCostsOpen ? '▴' : '▾'}
+              onPress={() => update($, showCosts, v => !v)}
+            />
+            )}
           </Box>
 
           <Box key="tokens-row" flexDirection="row" alignItems="center" gap={3} flexWrap="wrap">
@@ -584,6 +596,7 @@ export const register: Register = on => {
             {shared}
           </Box>
 
+          {isCostsOpen || isTurn ? (
           <Box key="money" flexDirection="row" alignItems="center" gap={2} flexWrap="wrap">
             <Box key="cost" flexDirection="row" alignItems="center" gap={1}>
               <Svg source={badge(badgeFor.letter, badgeFor.color)} alt={badgeFor.alt} width={16} height={16} />
@@ -614,6 +627,7 @@ export const register: Register = on => {
             {Stat({ k: 'today', value: money(s.todayCost), label: 'today' })}
             {isTurn ? null : Stat({ k: 'turn', value: turnCostText, label: 'last turn' })}
           </Box>
+          ) : null}
         </Box>
       </Box>
     )

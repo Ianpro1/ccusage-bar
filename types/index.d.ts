@@ -52,6 +52,8 @@ declare module 'claude-code' {
       isHidden: boolean
       scope: 'session' | 'project' | 'turn'
       lastTurn: LastTurn | null
+      /** Whether the cost row is open; it starts open. */
+      costsOpen: boolean
     }
   }
 }
