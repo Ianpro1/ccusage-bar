@@ -1,13 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { LastTurn, ModelShare, UsageSnapshot } from '../types'
+import type { LastTurn, ModelShare, TurnStats, UsageSnapshot } from '../types'
 
 const snapshot = atom({ plugin: 'ccusage-bar', key: 'snapshot' } as const, null)
 const isHidden = atom({ plugin: 'ccusage-bar', key: 'isHidden' } as const, false)
 const scope = atom({ plugin: 'ccusage-bar', key: 'scope' } as const, 'session' as 'session' | 'project' | 'turn')
 const lastTurn = atom({ plugin: 'ccusage-bar', key: 'lastTurn' } as const, null as LastTurn | null)
 const showCosts = atom({ plugin: 'ccusage-bar', key: 'costsOpen' } as const, true)
+// Turn timing for this session; $.state keeps it across mod reloads.
+const turnStats = atom(
+  { plugin: 'ccusage-bar', key: 'turnStats' } as const,
+  { count: 0, totalMs: 0 } as TurnStats,
+)
 
 const REFRESH_MS = 60_000
 
@@ -17,6 +22,9 @@ const YELLOW = '#d9a000'
 const ORANGE = '#e8742a'
 const RED = '#e5484d'
 const TRACK = 'rgba(128,128,128,0.28)'
+// the tint behind each view button price: the current view warm, the others neutral
+const PRICE_ON = 'rgba(217,119,87,0.22)'
+const PRICE_OFF = 'rgba(128,128,128,0.16)'
 
 const tone = (pct: number) =>
   pct < 50 ? GREEN : pct < 70 ? YELLOW : pct < 85 ? ORANGE : RED
@@ -352,6 +360,13 @@ export const register: Register = on => {
       isAborted: e.isAborted,
     }
     await update($, lastTurn, () => turn)
+    // A stopped turn was cut short, so it would drag the average down.
+    if (!e.isAborted) {
+      await update($, turnStats, prev => ({
+        count: (prev?.count ?? 0) + 1,
+        totalMs: (prev?.totalMs ?? 0) + e.durationMs,
+      }))
+    }
     void refresh($)
     return result
   })
@@ -389,6 +404,8 @@ export const register: Register = on => {
     const ctxPct = Math.round(usage.context.percent ?? 0)
     const sessionCost = s.sessionCost ?? usage.cost?.usd ?? null
     const turn = await read($, lastTurn)
+    const stats = await read($, turnStats)
+    const avgTurnMs = stats && stats.count > 0 ? stats.totalMs / stats.count : null
     const turnCostText = turn?.cost == null ? '—' : `+${money(turn.cost)}`
 
     // Cache countdown: the cache lives `ttl` after the last request that used it.
@@ -436,6 +453,12 @@ export const register: Register = on => {
       { id: 'project', label: 'Project' },
       { id: 'turn', label: 'Last turn' },
     ] as const
+
+    const viewPrice: Record<(typeof VIEWS)[number]['id'], string> = {
+      session: money(sessionCost),
+      project: money(s.folderCost),
+      turn: money(turn?.cost),
+    }
 
     // ---- terminal: compact text, no SVG there
     if (Svg === null) {
@@ -499,14 +522,6 @@ export const register: Register = on => {
       </Box>
     )
 
-    const badgeFor = isTurn
-      ? { letter: 'L', color: ORANGE, alt: 'last turn cost' }
-      : isProject
-        ? { letter: 'P', color: '#7c6cf0', alt: 'project cost' }
-        : { letter: 'S', color: GREEN, alt: 'session cost' }
-
-    const mainCost = isTurn ? turnCostText : money(isProject ? s.folderCost : sessionCost)
-    const mainLabel = isTurn ? 'last turn' : isProject ? folderName(cwd) : 'session'
 
     const shared = [
       Metric({
@@ -553,15 +568,26 @@ export const register: Register = on => {
             <Svg source={check(headline.color, headline.ok)} alt={headline.text} width={14} height={14} />
             <Text size="body" dimColor>{headline.text}</Text>
             <Box flexGrow={1} />
+            {/* each view's price sits beside its button */}
             {VIEWS.flatMap((v, i) => [
               i > 0 ? <Text key={`dot-${v.id}`} size="body" dimColor>·</Text> : null,
               <Button
                 key={`view-${v.id}`}
                 plain
                 dimColor={view !== v.id}
-                label={v.label}
+                label={`${v.label} ${viewPrice[v.id]}`}
                 onPress={() => update($, scope, () => v.id)}
-              />,
+              >
+                {v.label}{' '}
+                <Text
+                  size="body"
+                  weight="bold"
+                  tabular
+                  backgroundColor={view === v.id ? PRICE_ON : PRICE_OFF}
+                >
+                  {' '}{viewPrice[v.id]}{' '}
+                </Text>
+              </Button>,
             ])}
             <Button key="refresh" plain dimColor label="↻" onPress={() => refresh($)} />
             {isTurn ? null : (
@@ -594,15 +620,20 @@ export const register: Register = on => {
                   cacheHitMetric,
                 ]}
             {shared}
+            {/* last in the row in Session view; Last turn has it in its bottom row,
+                and Project leaves it out (it is this session's figure) */}
+            {isProject || isTurn
+              ? null
+              : Stat({
+                  k: 'avg-turn',
+                  value: avgTurnMs === null ? '—' : elapsed(avgTurnMs),
+                  label: 'avg turn',
+                  big: true,
+                })}
           </Box>
 
           {isCostsOpen || isTurn ? (
           <Box key="money" flexDirection="row" alignItems="center" gap={2} flexWrap="wrap">
-            <Box key="cost" flexDirection="row" alignItems="center" gap={1}>
-              <Svg source={badge(badgeFor.letter, badgeFor.color)} alt={badgeFor.alt} width={16} height={16} />
-              <Text size="body" weight="bold" tabular>{mainCost}</Text>
-              <Text size="body" dimColor>{mainLabel}</Text>
-            </Box>
             {isTurn
               ? Metric({
                   k: 'share',
@@ -625,7 +656,13 @@ export const register: Register = on => {
               <Text size="body" dimColor>{mixText}</Text>
             </Box>
             {Stat({ k: 'today', value: money(s.todayCost), label: 'today' })}
-            {isTurn ? null : Stat({ k: 'turn', value: turnCostText, label: 'last turn' })}
+            {isTurn
+              ? Stat({
+                  k: 'avg-turn',
+                  value: avgTurnMs === null ? '—' : elapsed(avgTurnMs),
+                  label: 'avg turn',
+                })
+              : null}
           </Box>
           ) : null}
         </Box>

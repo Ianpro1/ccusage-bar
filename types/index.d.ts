@@ -26,6 +26,9 @@ export type UsageSnapshot = {
   error: string | null
 }
 
+/** Running totals for the average turn time. */
+export type TurnStats = { count: number; totalMs: number }
+
 /** The most recent turn of this session, as Claude Code reported it. */
 export type LastTurn = {
   /** USD, Claude Code's estimate. */
@@ -54,6 +57,8 @@ declare module 'claude-code' {
       lastTurn: LastTurn | null
       /** Whether the cost row is open; it starts open. */
       costsOpen: boolean
+      /** Completed (not stopped) turns this session and their summed duration. */
+      turnStats: TurnStats
     }
   }
 }

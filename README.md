@@ -8,20 +8,21 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 
 ## What it shows
 
+**Header:** **Session**, **Project** and **Last turn** switch the view, and each shows its cost: this session, this project folder, and your most recent message.
+
 **Top row**
 - **tokens:** every token the session or project used (input, output, cache writes and cache reads).
 - **cache hit:** the share of input served from the prompt cache, which costs about a tenth of normal input. Higher is better.
 - **cache:** time left before the prompt cache expires (1 hour on subscriptions, 5 minutes on the API). Your next message after it runs out pays full price to re-read the conversation.
 - **context:** how full the context window is. Near 100%, Claude Code compacts the conversation.
+- **avg turn:** how long Claude works on a prompt in this session, on average (stopped turns left out). Not shown in Project view.
 
-**Cost row** (open by default; the ▴ / ▾ arrow at the end of the header hides and shows it)
-- **S / P / L:** the cost of this session, this project folder, or the last turn.
-- **of project / sessions / of session:** this session's share of the project, the project's session count, or the last turn's share of the session.
+**Bottom row** (open by default; the ▴ / ▾ arrow at the end of the header hides and shows it)
+- **of project / sessions:** this session's share of the project's cost, or the project's session count.
 - **Model mix:** how the cost splits between Opus, Sonnet and Haiku.
 - **today:** everything since midnight, across all projects.
-- **last turn:** what your most recent message cost.
 
-**Last turn view:** how long the turn took, how many tool calls it made, the tokens it read (in) and wrote (out), and its cache hit rate.
+**Last turn view:** the top row shows how long the turn took, how many tool calls it made, the tokens it read (in) and wrote (out), and its cache hit rate; the bottom row shows its share of the session's cost, its model, today, and the average turn time.
 
 **Tally**, the character, bobs and blinks normally, turns worried at 70% context and alarmed at 85%, and looks busy while Claude is working.
 

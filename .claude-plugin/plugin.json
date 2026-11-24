@@ -1,6 +1,6 @@
 {
   "name": "ccusage-bar",
-  "version": "0.1.0",
-  "description": "A clean ccusage bar above the prompt: 5-hour block progress, block cost, burn rate, projection, today's total and this session's estimate.",
+  "version": "0.2.0",
+  "description": "A clean ccusage bar above the prompt: session, project and last-turn costs, tokens, cache hit, cache countdown, context, model mix and average turn time, with Tally, an animated character.",
   "types": "./types/index.d.ts"
 }
