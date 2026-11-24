@@ -151,12 +151,12 @@ const check = (color: string, isOk: boolean) =>
 
 // ---- the mascot: "Tally", an original little meter creature ----------------
 //
-// A rounded body with a three-bar gauge on its belly, an antenna, two eyes
+// A rounded body with a three-bar gauge on its belly, two eyes
 // and stubby feet, animated with SMIL (runs in the desktop's SVG image):
 //   calm     bobs gently and blinks every few seconds
 //   worried  (context 70%+) orange, flat mouth, quicker bob
 //   alarmed  (context 85%+) red, open mouth, shivers
-//   working  (Claude is mid-turn) antenna pulses, eyes scan, gauge bars bounce,
+//   working  (Claude is mid-turn) eyes scan, gauge bars bounce,
 //            feet shuffle
 type Mood = 'calm' | 'worried' | 'alarmed'
 
@@ -213,11 +213,6 @@ function mascot(mood: Mood, isWorking: boolean) {
     return `<rect x="${x}" y="${y}" width="2" height="${h}" rx="0.6" fill="#fff" opacity="${0.65 + i * 0.15}">${bounce}</rect>`
   }
 
-  const antennaPulse = isWorking
-    ? `<animate attributeName="r" dur="0.8s" repeatCount="indefinite" values="1.4;2.1;1.4"/>
-       <animate attributeName="opacity" dur="0.8s" repeatCount="indefinite" values="1;0.55;1"/>`
-    : ''
-
   const shuffle = (begin: string) =>
     isWorking
       ? `<animateTransform attributeName="transform" type="translate" dur="0.5s" begin="${begin}"
@@ -226,8 +221,6 @@ function mascot(mood: Mood, isWorking: boolean) {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
 <g>${motion}
-  <line x1="17" y1="5.5" x2="17" y2="2.6" stroke="${dark}" stroke-width="1" stroke-linecap="round"/>
-  <circle cx="17" cy="2.2" r="1.4" fill="${isWorking ? '#f9e2af' : body}">${antennaPulse}</circle>
   <rect x="7" y="29" width="5" height="2.6" rx="1.2" fill="${dark}">${shuffle('0s')}</rect>
   <rect x="22" y="29" width="5" height="2.6" rx="1.2" fill="${dark}">${shuffle('0.25s')}</rect>
   <rect x="4" y="5.5" width="26" height="24.5" rx="8" fill="${body}"/>

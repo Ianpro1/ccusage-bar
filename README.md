@@ -45,7 +45,7 @@ All costs are estimates from your local logs; your bill is the authority.
 At the prompt of a Claude Code terminal session:
 
 ```
-/plugin install ccusage-bar --marketplace OWNER/REPO
+/plugin install ccusage-bar --marketplace Ianpro1/ccusage-bar
 ```
 
 Answer `y` to add the marketplace, then pick a scope.
@@ -53,10 +53,10 @@ Answer `y` to add the marketplace, then pick a scope.
 From a shell:
 
 ```
-claude plugin install ccusage-bar --marketplace OWNER/REPO
+claude plugin install ccusage-bar --marketplace Ianpro1/ccusage-bar
 ```
 
-In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `OWNER/REPO`, then **Add plugin**.
+In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `Ianpro1/ccusage-bar`, then **Add plugin**.
 
 ## Commands
 
