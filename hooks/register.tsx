@@ -22,9 +22,9 @@ const YELLOW = '#d9a000'
 const ORANGE = '#e8742a'
 const RED = '#e5484d'
 const TRACK = 'rgba(128,128,128,0.28)'
-// the tint behind each view button price: the current view warm, the others neutral
-const PRICE_ON = 'rgba(217,119,87,0.22)'
-const PRICE_OFF = 'rgba(128,128,128,0.16)'
+// view button prices: Tally's orange, so they stand out from the names
+// (the button's own dimming still marks which view is not selected)
+const PRICE_COLOR = '#d97757'
 
 const tone = (pct: number) =>
   pct < 50 ? GREEN : pct < 70 ? YELLOW : pct < 85 ? ORANGE : RED
@@ -571,23 +571,19 @@ export const register: Register = on => {
             {/* each view's price sits beside its button */}
             {VIEWS.flatMap((v, i) => [
               i > 0 ? <Text key={`dot-${v.id}`} size="body" dimColor>·</Text> : null,
-              <Button
-                key={`view-${v.id}`}
-                plain
-                dimColor={view !== v.id}
-                label={`${v.label} ${viewPrice[v.id]}`}
-                onPress={() => update($, scope, () => v.id)}
-              >
-                {v.label}{' '}
-                <Text
-                  size="body"
-                  weight="bold"
-                  tabular
-                  backgroundColor={view === v.id ? PRICE_ON : PRICE_OFF}
-                >
-                  {' '}{viewPrice[v.id]}{' '}
+              <Box key={`view-${v.id}`} flexDirection="row" alignItems="center" gap={1}>
+                <Button
+                  key={`view-${v.id}-name`}
+                  plain
+                  dimColor={view !== v.id}
+                  label={v.label}
+                  onPress={() => update($, scope, () => v.id)}
+                />
+                {/* outside the button: the app drops text colour inside one */}
+                <Text size="body" weight="bold" tabular color={PRICE_COLOR} dimColor={view !== v.id}>
+                  {viewPrice[v.id]}
                 </Text>
-              </Button>,
+              </Box>,
             ])}
             <Button key="refresh" plain dimColor label="↻" onPress={() => refresh($)} />
             {isTurn ? null : (
