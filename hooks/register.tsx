@@ -291,6 +291,12 @@ let turnSkills: Record<string, number> = {}
 let dataDir: string | null = null
 let isBuilding = false
 
+// Add-ons a project can have, by the folder they leave in it: recorded per
+// session as "available", so sessions that had one but didn't use it can be
+// compared with sessions that used it.
+const ADDON_FOLDERS: [string, string][] = [['graphify', 'graphify-out']]
+let addonsPresent: string[] = []
+
 async function saveTurn($: any, turn: LastTurn, u: any, mcp: Record<string, number>, skills: Record<string, number>) {
   if (!dataDir) return
   const id = await $.session.id()
@@ -306,6 +312,7 @@ async function saveTurn($: any, turn: LastTurn, u: any, mcp: Record<string, numb
       .filter(Boolean)
     rec.mcpConnected = [...new Set([...(rec.mcpConnected ?? []), ...servers])]
   } catch { /* keep what we had */ }
+  rec.addonsPresent = [...new Set([...(rec.addonsPresent ?? []), ...addonsPresent])]
   const model = u?.model
   rec.turns.push({
     e: turn.endedAt,
@@ -363,16 +370,16 @@ async function importDaily($: any) {
 }
 
 // Builds the dashboard page with Node and opens it in the browser.
-async function openDashboard($: any): Promise<string> {
+async function openDashboard($: any, page: 'dashboard' | 'compare' = 'dashboard'): Promise<string> {
   if (isBuilding) return 'The dashboard is already being built.'
   isBuilding = true
   try {
-    const ran = await runBuilder($, ['--open'])
+    const ran = await runBuilder($, ['--open', '--page', page])
     if (ran.exitCode !== 0) {
       const why = String(ran.stderr || ran.stdout).trim().split('\n').pop() ?? ''
       return `Dashboard failed: ${why.slice(0, 160)}`
     }
-    return 'Dashboard opened in your browser.'
+    return page === 'compare' ? 'Project comparison opened in your browser.' : 'Dashboard opened in your browser.'
   } catch (err) {
     return `Dashboard failed: ${err instanceof Error ? err.message : String(err)} (is Node.js installed?)`
   } finally {
@@ -451,10 +458,17 @@ export const register: Register = on => {
     } catch {
       dataDir = null // no data folder: the bar works, the dashboard gets only the logs
     }
+    try {
+      const cwd = await $.session.cwd()
+      addonsPresent = []
+      for (const [id, folder] of ADDON_FOLDERS) if (await $.fs.exists(`${cwd}/${folder}`)) addonsPresent.push(id)
+    } catch {
+      /* unknown; recorded as none */
+    }
     isWindows = (await $.session.machine()).sysname === 'Windows_NT'
     $.command.register({
       name: 'ccusage-bar',
-      description: 'ccusage bar: show | hide | refresh | dashboard',
+      description: 'ccusage bar: show | hide | refresh | dashboard | compare',
     })
     void refresh($)
     $.clock.every(REFRESH_MS, () => void refresh($))
@@ -531,6 +545,7 @@ export const register: Register = on => {
   on('command.run', { command: 'ccusage-bar' }, async ($, e, next) => {
     const arg = String(e.args ?? '').trim().toLowerCase()
     if (arg === 'dashboard') return { text: await openDashboard($) }
+    if (arg === 'compare') return { text: await openDashboard($, 'compare') }
     if (arg === 'hide') {
       await update($, isHidden, () => true)
       return { text: 'ccusage bar hidden. Run /ccusage-bar show to bring it back.' }

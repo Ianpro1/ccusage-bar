@@ -35,6 +35,12 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 
 All costs are estimates from your local logs; your bill is the authority.
 
+## Bookkeeping
+
+The mod keeps a record of every prompt in every project: time, tokens and cost by model (subagents apart), context size, effort, tool calls by tool, tool errors, MCP servers, skills and add-ons used or available, compactions, cache expiry, and the first 100 characters of the prompt. Everything stays on your machine, capped at 20 MB.
+
+The point is to answer questions like "does graphify save tokens?" or "do mixed-model prompts save my limit?". Ask Claude in this project; it reads the records with [`dashboard/metrics.mjs`](dashboard/metrics.mjs), and [`docs/METRICS.md`](docs/METRICS.md) lists every field and the traps to avoid when comparing.
+
 ## Dashboard
 
 **📊 Dashboard** in the bar's header (or `/ccusage-bar dashboard`) opens a page in your browser with every project and session you've run in Claude Code:
@@ -43,6 +49,15 @@ All costs are estimates from your local logs; your bill is the authority.
 - **Navigation:** pick a project in the sidebar, or open a session from the sessions table to see it turn by turn. The browser's back button works, and each view has its own link.
 - **Tools & add-ons:** the MCP servers, skills, subagents and add-ons (such as graphify) each project or session used. Click one to see only the sessions that used it.
 - **Period:** 7 days, 30 days, 90 days, a year, or all time.
+
+**Compare projects** (the tab at the top of the dashboard, or `/ccusage-bar compare`) puts your projects side by side and shows what each add-on, MCP server, skill and model does to **cost per turn** or **turn time**:
+
+- **Compare:** *Same projects* compares sessions that used it with sessions that didn't, inside the projects that have both, then averages over those projects. *Before vs after* compares each project's turns before it was first used with the turns after. *Everything* pools all turns: simplest, but differences between projects can mislead.
+- **Normalize:** divide each turn's figure by its context size (tokens Claude was reading) or by your prompt's length, so big projects and long prompts don't look worse just for being big.
+- **Show** picks one table at a time: *Add-ons, MCP & skills*, *Model mix*, or *Projects*.
+- **Model mix** compares mixed-model prompts (two or more model families each doing 5% or more of a prompt's cost, such as Opus with Haiku subagents) with single-model prompts, each model family's prompts with the rest, and lists every combination of models with its median and its difference from single-model prompts.
+- Click a row to see it project by project. Results are medians, show their sample sizes, and say *few data* when there isn't much to go on.
+- The projects table shows prompts, median cost or time, prompt length, context size, the folder's size (files and MB), model mix, and the add-ons, MCP servers and skills used.
 
 How it gets its data:
 
@@ -87,6 +102,7 @@ In the desktop app, where `/plugin` does not run: click **+** next to the prompt
 - `/ccusage-bar show` brings it back.
 - `/ccusage-bar refresh` re-reads the figures (they also refresh every minute and after each turn).
 - `/ccusage-bar dashboard` builds the dashboard and opens it in your browser.
+- `/ccusage-bar compare` opens the project comparison.
 
 ## Credits
 

@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare Projects</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface: #fcfcfb; --surface-2: #f0efec; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7974;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s7: #6250d6; --other: #a3a29b;
+  --better: #2a78d6; --worse: #e34948; --neutral: #d8d7d2;
+  --accent: #2a78d6; --accent-soft: rgba(42, 120, 214, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #33332f;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s7: #9085e9; --other: #6b6a64;
+    --better: #3987e5; --worse: #e66767; --neutral: #383835;
+    --accent: #3987e5; --accent-soft: rgba(57, 135, 229, 0.16);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #33332f;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s7: #9085e9; --other: #6b6a64;
+  --better: #3987e5; --worse: #e66767; --neutral: #383835;
+  --accent: #3987e5; --accent-soft: rgba(57, 135, 229, 0.16);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+header.top {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px;
+  padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+header.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
+nav.tabs { display: flex; gap: 4px; }
+nav.tabs a { padding: 5px 12px; border-radius: 8px; color: var(--text-2); text-decoration: none; font-size: 13.5px; }
+nav.tabs a.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+nav.tabs a:hover { background: var(--surface-2); }
+.spacer { flex: 1; }
+.meta { color: var(--text-3); font-size: 12.5px; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 50px; }
+h2 { font-size: 20px; margin: 0; font-weight: 650; }
+.title-line { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
+.view-pick { display: inline-flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; }
+.view-select {
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 30px 6px 12px; cursor: pointer;
+}
+.view-select:hover { border-color: var(--text-3); }
+.view-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.lede { color: var(--text-2); margin: 0 0 16px; }
+
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  position: sticky; top: 49px; z-index: 4;
+}
+.control { display: flex; gap: 8px; align-items: center; }
+.control .lbl { color: var(--text-3); font-size: 12.5px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 5px 11px; cursor: pointer; font-size: 13px; color: var(--text-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.method-note { color: var(--text-3); font-size: 12.5px; margin: 8px 2px 0; }
+
+section.block { margin-top: 26px; }
+.block-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.block-head h3 { margin: 0; font-size: 16px; font-weight: 640; }
+.block-head .note { color: var(--text-3); font-size: 12.5px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.table-wrap { overflow-x: auto; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-weight: 600; color: var(--text-2); font-size: 12.5px; padding: 9px 12px;
+  border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--surface);
+}
+th.sortable { cursor: pointer; user-select: none; }
+th .arrow { color: var(--accent); }
+th.r, td.r { text-align: right; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tr.group td { background: var(--surface-2); color: var(--text-2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 12px; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--surface-2); }
+tr.detail td { background: var(--bg); padding: 0; }
+.muted { color: var(--text-3); }
+.small { font-size: 12px; }
+.name { font-weight: 560; }
+.caret { display: inline-block; width: 14px; color: var(--text-3); }
+
+/* a horizontal value bar */
+.hbar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.hbar .track { width: 120px; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.hbar .fill { height: 100%; border-radius: 4px; background: var(--s1); }
+
+/* the effect bar: centre line, left = lower (better), right = higher (worse) */
+.effect { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.effect .axis { position: relative; width: 180px; height: 12px; }
+.effect .axis::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--text-3); opacity: .6; }
+.effect .axis span { position: absolute; top: 2px; height: 8px; border-radius: 4px; }
+.effect .val { width: 62px; text-align: right; font-weight: 600; }
+.better { color: var(--better); }
+.worse { color: var(--worse); }
+.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-3); white-space: nowrap; }
+.badge.solid { color: var(--text-2); }
+
+.mix { display: flex; height: 8px; width: 110px; border-radius: 4px; overflow: hidden; background: var(--surface-2); gap: 1px; }
+.mix span { display: block; height: 100%; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 11.5px; margin: 1px 2px 1px 0; white-space: nowrap; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-3); font-size: 12px; margin: 8px 2px 0; }
+.legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+.inner { padding: 10px 14px 14px 40px; }
+.inner table { font-size: 12.5px; }
+.inner th, .inner td { padding: 6px 10px; background: transparent; }
+.inner .why { color: var(--text-3); font-size: 12px; margin: 0 0 8px; }
+.empty { color: var(--text-3); padding: 26px; text-align: center; }
+.too-few { color: var(--text-3); font-size: 12.5px; margin-top: 10px; }
+
+@media (max-width: 760px) {
+  header.top { padding: 10px 16px; flex-wrap: wrap; }
+  header.top .meta { display: none; }
+  main { padding: 16px; }
+  .controls { position: static; }
+  .effect .axis { width: 110px; }
+  .hbar .track { width: 70px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Claude Code metrics</h1>
+  <nav class="tabs"><a href="dashboard.html">Dashboard</a><a href="compare.html" class="on">Compare projects</a></nav>
+  <span class="spacer"></span>
+  <span class="meta" id="meta"></span>
+  <button class="icon-btn" id="theme" title="Switch light / dark">◐ Theme</button>
+</header>
+<main id="main"></main>
+
+<script>
+const DATA = /*__DATA__*/null
+
+// ---------------------------------------------------------------- helpers
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue
+    if (k === 'class') n.className = v
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v)
+    else n.setAttribute(k, v === true ? '' : v)
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid instanceof Node ? kid : String(kid))
+  return n
+}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+const DAY = 86_400_000
+const money = n => n == null ? '—' : n >= 100 ? `$${Math.round(n)}` : n >= 1 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(3)}` : '$0'
+const dur = ms => {
+  if (ms == null || !isFinite(ms)) return '—'
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+const signed = r => r == null ? '—' : `${r >= 0 ? '+' : '−'}${Math.abs(Math.round(r * 100))}%`
+const tokens = n => n == null ? '—' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(Math.round(n))
+const bytes = n => n == null ? '—' : n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
+const median = values => {
+  const xs = values.filter(v => v != null && isFinite(v))
+  if (!xs.length) return null
+  const a = [...xs].sort((x, y) => x - y)
+  const m = a.length >> 1
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2
+}
+const mean = values => {
+  const xs = values.filter(v => v != null && isFinite(v))
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null
+}
+
+const family = m => /opus/i.test(m) ? 'Opus' : /sonnet/i.test(m) ? 'Sonnet' : /haiku/i.test(m) ? 'Haiku' : /fable/i.test(m) ? 'Fable' : /mythos/i.test(m) ? 'Mythos' : 'Other'
+const FAMILY_ORDER = ['Sonnet', 'Opus', 'Haiku', 'Fable', 'Mythos', 'Other']
+const FAMILY_SLOT = { Sonnet: 's1', Opus: 's2', Haiku: 's3', Fable: 's4', Mythos: 's7' }
+const familyColor = f => FAMILY_SLOT[f] ? css('--' + FAMILY_SLOT[f]) : css('--other')
+const isBuiltin = server => /^ccd_/.test(server)
+// a connector added in claude.ai is named by its id
+const serverLabel = s => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(s) ? `Connector ${s.slice(0, 8)}` : s
+const addonLabel = id => (DATA?.addons ?? []).find(a => a.id === id)?.label ?? id
+
+// ---------------------------------------------------------------- turns
+// One record per finished turn: its project, session, time, cost and the
+// things it ran with. Stopped turns and older days kept only as daily totals
+// are left out (a median needs single turns).
+const PROJECTS = DATA?.projects ?? {}
+const TURNS = []
+for (const s of DATA?.sessions ?? []) {
+  const families = {}
+  for (const t of s.turns ?? []) for (const [m, a] of Object.entries(t.m ?? {})) families[family(m)] = (families[family(m)] ?? 0) + (a[5] ?? 0)
+  const sessionCost = Object.values(families).reduce((a, b) => a + b, 0)
+  const mixed = Object.values(families).filter(c => sessionCost > 0 && c / sessionCost >= 0.05).length >= 2
+  const tags = {
+    addon: new Set(s.addons ?? []),
+    mcp: new Set(Object.keys(s.mcp ?? {}).filter(x => !isBuiltin(x))),
+    skill: new Set(Object.keys(s.skills ?? {})),
+  }
+  for (const t of s.turns ?? []) {
+    if (t.a) continue
+    let cost = 0, top = null, topCost = -1
+    const fam = {}
+    for (const [m, a] of Object.entries(t.m ?? {})) {
+      const c = a[5] ?? 0
+      cost += c
+      fam[family(m)] = (fam[family(m)] ?? 0) + c
+    }
+    for (const [f, c] of Object.entries(fam)) if (c > topCost) { top = f; topCost = c }
+    if (!top) continue
+    // the families that did a real share (5%+) of the prompt's work
+    const fams = Object.entries(fam).filter(([, c]) => cost > 0 && c / cost >= 0.05).map(([f]) => f)
+      .sort((a, b) => FAMILY_ORDER.indexOf(a) - FAMILY_ORDER.indexOf(b))
+    TURNS.push({
+      p: s.p, sid: s.id, s: t.s, time: t.d ?? 0, cost, fam, lead: top, mixed, tags, pc: t.pc ?? 0, cx: t.cx ?? 0, o: t.o ?? 'h',
+      combo: fams.length ? fams : [top], mixedTurn: fams.length >= 2,
+    })
+  }
+}
+TURNS.sort((a, b) => a.s - b.s)
+
+// add-ons that left a folder in a project (shown on the project, not used for impact)
+const PROJECT_ADDONS = new Map()
+for (const s of DATA?.sessions ?? []) for (const a of s.projectAddons ?? []) {
+  if (!PROJECT_ADDONS.has(s.p)) PROJECT_ADDONS.set(s.p, new Set())
+  PROJECT_ADDONS.get(s.p).add(a)
+}
+
+// The things whose impact is measured. Each says which turns have it.
+function factors(turns) {
+  const out = []
+  const seen = { addon: new Set(), mcp: new Set(), skill: new Set(), lead: new Set() }
+  for (const t of turns) {
+    for (const k of ['addon', 'mcp', 'skill']) for (const n of t.tags[k]) seen[k].add(n)
+    seen.lead.add(t.lead)
+  }
+  for (const n of seen.addon) out.push({ group: 'Add-ons', id: `addon:${n}`, label: addonLabel(n), has: t => t.tags.addon.has(n), scope: 'session' })
+  for (const n of seen.mcp) out.push({ group: 'MCP servers', id: `mcp:${n}`, label: serverLabel(n), has: t => t.tags.mcp.has(n), scope: 'session' })
+  for (const n of seen.skill) out.push({ group: 'Skills', id: `skill:${n}`, label: n, has: t => t.tags.skill.has(n), scope: 'session' })
+  out.push({ group: 'Models', id: 'mixedTurn', label: 'Mixed-model prompts', has: t => t.mixedTurn, scope: 'turn', pinned: true })
+  out.push({ group: 'Models', id: 'mixed', label: 'Mixed-model sessions', has: t => t.mixed, scope: 'session', pinned: true })
+  for (const f of FAMILY_ORDER) if (seen.lead.has(f)) out.push({ group: 'Models', id: `lead:${f}`, label: `${f}-led prompts`, has: t => t.lead === f, scope: 'turn', color: familyColor(f) })
+  return out
+}
+
+// ---------------------------------------------------------------- state
+const state = { view: 'impact', measure: 'cost', method: 'same', range: '90', norm: 'off', open: new Set(), sort: { key: 'value', dir: -1 } }
+try { Object.assign(state, JSON.parse(sessionStorage.getItem('ccm-compare') ?? '{}'), { open: new Set() }) } catch { }
+const save = () => { try { sessionStorage.setItem('ccm-compare', JSON.stringify({ view: state.view, measure: state.measure, method: state.method, range: state.range, norm: state.norm, sort: state.sort })) } catch { } }
+
+const MIN = 3 // fewest turns on each side, per project, to compare
+const METHODS = {
+  same: 'Sessions that used it against sessions that didn\'t, inside the same projects; the differences are then averaged over those projects.',
+  before: 'In each project, the turns after it was first used against the turns before.',
+  simple: 'Every turn in a session that used it against every turn that didn\'t. Simple, but differences between projects can mislead.',
+}
+const MEASURE_LABEL = { cost: 'cost per turn', time: 'turn time' }
+const NORM_LABEL = { off: '', context: ' per 100k tokens of context', prompt: ' per 1,000 prompt characters' }
+const NORM_NOTE = {
+  off: '',
+  context: ' Normalized by context size: each turn\'s figure is divided by how many tokens Claude was reading (its largest request), so big conversations and big projects don\'t look worse just for being big.',
+  prompt: ' Normalized by prompt length: each turn\'s figure is divided by your prompt\'s length, counted as at least 100 characters so one-word replies don\'t blow up.',
+}
+const measureLabel = () => MEASURE_LABEL[state.measure] + NORM_LABEL[state.norm]
+// the figure compared for one turn; null when it can't be normalized
+const val = t => {
+  const raw = state.measure === 'cost' ? t.cost : t.time
+  if (state.norm === 'context') return t.cx > 0 ? raw / (t.cx / 100_000) : null
+  if (state.norm === 'prompt') return t.o === 'h' ? raw / (Math.max(t.pc, 100) / 1000) : null
+  return raw
+}
+const fmt = v => state.measure === 'cost' ? money(v) : dur(v)
+
+function inRange() {
+  if (state.range === 'all') return TURNS
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  const start = t.getTime() - (Number(state.range) - 1) * DAY
+  return TURNS.filter(x => x.s >= start)
+}
+
+// Per project, the two groups a method compares.
+function sides(turns, f) {
+  const byProject = new Map()
+  for (const t of turns) {
+    if (!byProject.has(t.p)) byProject.set(t.p, [])
+    byProject.get(t.p).push(t)
+  }
+  const out = []
+  for (const [p, list] of byProject) {
+    let withT, without
+    if (state.method === 'before') {
+      const first = list.find(f.has)
+      if (!first) continue
+      withT = list.filter(t => t.s >= first.s)
+      without = list.filter(t => t.s < first.s)
+    } else {
+      withT = list.filter(f.has)
+      without = list.filter(t => !f.has(t))
+    }
+    out.push({ p, withT, without })
+  }
+  return out
+}
+
+// Effect: median with ÷ median without − 1, combined over projects by
+// weighting each project's log-ratio by its smaller side.
+function impact(turns, f) {
+  const per = sides(turns, f)
+  if (state.method === 'simple') {
+    const w = per.flatMap(x => x.withT), wo = per.flatMap(x => x.without)
+    const mw = median(w.map(val)), mwo = median(wo.map(val))
+    const effect = w.length && wo.length && mwo > 0 ? mw / mwo - 1 : null
+    return {
+      f, effect, withMed: mw, withoutMed: mwo, nWith: w.length, nWithout: wo.length,
+      projects: per.filter(x => x.withT.length).length, solid: w.length >= 20 && wo.length >= 20, per,
+    }
+  }
+  let sw = 0, swl = 0
+  const used = []
+  for (const x of per) {
+    if (x.withT.length < MIN || x.without.length < MIN) continue
+    const a = median(x.withT.map(val)), b = median(x.without.map(val))
+    if (!(a > 0) || !(b > 0)) continue
+    const w = Math.min(x.withT.length, x.without.length)
+    sw += w; swl += w * Math.log(a / b)
+    used.push(x)
+  }
+  const w = used.flatMap(x => x.withT), wo = used.flatMap(x => x.without)
+  return {
+    f, effect: sw > 0 ? Math.exp(swl / sw) - 1 : null,
+    withMed: median(w.map(val)), withoutMed: median(wo.map(val)), nWith: w.length, nWithout: wo.length,
+    projects: used.length, solid: used.length >= 2 && sw >= 15, per,
+  }
+}
+
+// ---------------------------------------------------------------- render
+function seg(options, value, onPick) {
+  return el('div', { class: 'seg', role: 'group' }, options.map(([v, label]) =>
+    el('button', { class: v === value ? 'on' : null, 'aria-pressed': String(v === value), onclick: () => onPick(v) }, label)))
+}
+function set(patch) { Object.assign(state, patch); save(); render() }
+
+function render() {
+  const y = window.scrollY
+  const main = document.getElementById('main')
+  main.style.minHeight = `${main.offsetHeight}px`
+  main.replaceChildren()
+  if (!DATA) { main.append(el('div', { class: 'empty' }, 'No data in this page. Open it from the dashboard.')); return }
+
+  const views = [['impact', 'Add-ons, MCP servers & skills'], ['models', 'Model mix'], ['projects', 'Projects side by side']]
+  const picker = el('select', { class: 'view-select', 'aria-label': 'Table to show', onchange: e => set({ view: e.target.value, open: new Set() }) },
+    views.map(([v, label]) => el('option', { value: v, selected: v === state.view }, label)))
+  main.append(el('div', { class: 'title-line' }, el('h2', {}, 'Compare projects'), el('label', { class: 'view-pick' }, el('span', {}, 'Show'), picker)))
+  main.append(el('p', { class: 'lede' }, {
+    impact: `What each add-on, MCP server and skill does to the ${measureLabel()}.`,
+    models: `What the model mix does to the ${measureLabel()}: prompts that used several models against prompts that used one.`,
+    projects: `Your projects side by side: ${measureLabel()}, size and what they use.`,
+  }[state.view]))
+
+  main.append(el('div', {},
+    el('div', { class: 'controls' },
+      el('div', { class: 'control' }, el('span', { class: 'lbl' }, 'Measure'), seg([['cost', 'Cost per turn'], ['time', 'Turn time']], state.measure, v => set({ measure: v }))),
+      el('div', { class: 'control' }, el('span', { class: 'lbl' }, 'Compare'), seg([['same', 'Same projects'], ['before', 'Before vs after'], ['simple', 'Everything']], state.method, v => set({ method: v, open: new Set() }))),
+      el('div', { class: 'control' }, el('span', { class: 'lbl' }, 'Normalize'), seg([['off', 'Off'], ['context', 'By context size'], ['prompt', 'By prompt length']], state.norm, v => set({ norm: v }))),
+      el('div', { class: 'control' }, el('span', { class: 'lbl' }, 'Period'), seg([['30', '30 days'], ['90', '90 days'], ['all', 'All time']], state.range, v => set({ range: v, open: new Set() })))),
+    el('p', { class: 'method-note' }, METHODS[state.method], ' Medians, so one huge turn doesn\'t skew a result; stopped turns are left out.', NORM_NOTE[state.norm])))
+
+  const turns = inRange()
+  if (!turns.length) {
+    main.append(el('div', { class: 'card', style: 'margin-top:20px' }, el('div', { class: 'empty' }, 'No turns in this period.')))
+    finish(main, y)
+    return
+  }
+  if (state.view === 'impact') main.append(renderImpact(turns, ['Add-ons', 'MCP servers', 'Skills']))
+  else if (state.view === 'models') main.append(renderImpact(turns, ['Models']), renderCombos(turns))
+  else main.append(renderProjects(turns))
+  finish(main, y)
+}
+function finish(main, y) {
+  main.style.minHeight = ''
+  window.scrollTo({ top: y, behavior: 'instant' })
+}
+
+// ---- impact
+function effectCell(r) {
+  if (r.effect == null) return el('span', { class: 'muted small' }, 'not enough to compare')
+  const e = r.effect
+  // ±100% fills half the axis; beyond that it is capped
+  const half = Math.min(1, Math.abs(e)) * 50
+  const color = Math.abs(e) < 0.05 ? css('--neutral') : e < 0 ? css('--better') : css('--worse')
+  const bar = e < 0 ? `left:${50 - half}%;width:${half}%` : `left:50%;width:${half}%`
+  const cls = Math.abs(e) < 0.05 ? 'muted' : e < 0 ? 'better' : 'worse'
+  return el('div', { class: 'effect' },
+    el('div', { class: 'axis', title: `${signed(e)} ${measureLabel()}` }, el('span', { style: `${bar};background:${color}` })),
+    el('span', { class: `val num ${cls}` }, signed(e)))
+}
+
+function renderImpact(turns, groups) {
+  const rows = factors(turns).filter(f => groups.includes(f.group)).map(f => impact(turns, f))
+  const comparable = rows.filter(r => r.effect != null)
+  const tooFew = rows.filter(r => r.effect == null)
+  const body = el('tbody')
+  for (const g of groups) {
+    const list = comparable.filter(r => r.f.group === g)
+      .sort((a, b) => (!!b.f.pinned - !!a.f.pinned) || (b.solid - a.solid) || Math.abs(b.effect) - Math.abs(a.effect))
+    if (!list.length) continue
+    body.append(el('tr', { class: 'group' }, el('td', { colspan: 6 }, g)))
+    for (const r of list) {
+      const open = state.open.has(r.f.id)
+      const toggle = () => { open ? state.open.delete(r.f.id) : state.open.add(r.f.id); render() }
+      body.append(el('tr', { class: 'click', tabindex: '0', onclick: toggle, onkeydown: e => { if (e.key === 'Enter') toggle() } },
+        el('td', {}, el('span', { class: 'caret' }, open ? '▾' : '▸'),
+          r.f.color ? el('span', { style: `display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${r.f.color}` }) : null,
+          el('span', { class: 'name' }, r.f.label)),
+        el('td', { class: 'r num' }, fmt(r.withMed), el('div', { class: 'muted small' }, `${r.nWith} turns`)),
+        el('td', { class: 'r num' }, fmt(r.withoutMed), el('div', { class: 'muted small' }, `${r.nWithout} turns`)),
+        el('td', { class: 'r' }, effectCell(r)),
+        el('td', { class: 'r num muted' }, state.method === 'simple' ? `${r.projects}` : `${r.projects}`),
+        el('td', {}, el('span', { class: 'badge' + (r.solid ? ' solid' : '') }, r.solid ? 'enough data' : 'few data'))))
+      if (open) body.append(el('tr', { class: 'detail' }, el('td', { colspan: 6 }, renderBreakdown(r))))
+    }
+  }
+  const head = el('thead', {}, el('tr', {},
+    el('th', {}, 'Used'),
+    el('th', { class: 'r' }, state.method === 'before' ? 'After first use' : 'With it'),
+    el('th', { class: 'r' }, state.method === 'before' ? 'Before' : 'Without'),
+    el('th', { class: 'r' }, `Effect on ${measureLabel()}`),
+    el('th', { class: 'r' }, 'Projects'),
+    el('th', {}, '')))
+  return el('section', { class: 'block' },
+    el('div', { class: 'block-head' }, el('h3', {}, (groups.includes('Models') ? 'Models: what changes the ' : 'What changes the ') + measureLabel()),
+      el('span', { class: 'note' }, 'click a row to see it project by project')),
+    el('div', { class: 'card' }, comparable.length
+      ? el('div', { class: 'table-wrap' }, el('table', {}, head, body))
+      : el('div', { class: 'empty' }, 'Not enough data to compare anything with this method and period. Try a longer period or another method.')),
+    el('div', { class: 'legend' },
+      el('span', {}, el('span', { class: 'sw', style: `background:${css('--better')}` }), state.measure === 'cost' ? 'cheaper with it' : 'faster with it'),
+      el('span', {}, el('span', { class: 'sw', style: `background:${css('--worse')}` }), state.measure === 'cost' ? 'costlier with it' : 'slower with it'),
+      el('span', {}, 'Session-level for add-ons, MCP servers and skills (a session that used it once counts); turn-level for models (the model that cost most in the turn).')),
+    tooFew.length ? el('p', { class: 'too-few' }, `Also used, but too little data to compare with this method: ${tooFew.map(r => r.f.label).join(', ')}.`) : null)
+}
+
+function renderBreakdown(r) {
+  const rows = r.per
+    .map(x => ({ ...x, a: median(x.withT.map(val)), b: median(x.without.map(val)) }))
+    .filter(x => x.withT.length > 0) // only the projects that used it
+    .sort((x, y) => (y.withT.length + y.without.length) - (x.withT.length + x.without.length))
+  const counted = x => state.method === 'simple' ? x.withT.length > 0 && x.without.length > 0 : x.withT.length >= MIN && x.without.length >= MIN
+  return el('div', { class: 'inner' },
+    el('p', { class: 'why' }, state.method === 'simple'
+      ? 'Everything pools all projects; here is how each project looks on its own.'
+      : `Projects need at least ${MIN} turns on each side to count; greyed rows don't.`),
+    el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {}, 'Project'),
+        el('th', { class: 'r' }, state.method === 'before' ? 'After' : 'With'),
+        el('th', { class: 'r' }, state.method === 'before' ? 'Before' : 'Without'),
+        el('th', { class: 'r' }, 'Difference'))),
+      el('tbody', {}, rows.map(x => {
+        const ok = counted(x)
+        const d = x.a > 0 && x.b > 0 ? x.a / x.b - 1 : null
+        return el('tr', { style: ok ? null : 'opacity:.5' },
+          el('td', {}, PROJECTS[x.p]?.label ?? x.p),
+          el('td', { class: 'r num' }, fmt(x.a), el('span', { class: 'muted small' }, ` · ${x.withT.length}`)),
+          el('td', { class: 'r num' }, fmt(x.b), el('span', { class: 'muted small' }, ` · ${x.without.length}`)),
+          el('td', { class: 'r num ' + (d == null ? 'muted' : Math.abs(d) < 0.05 ? 'muted' : d < 0 ? 'better' : 'worse') }, signed(d)))
+      }))))
+}
+
+// ---- model combinations: which models each prompt used
+function renderCombos(turns) {
+  const groups = new Map()
+  for (const t of turns) {
+    const key = t.combo.join(' + ')
+    if (!groups.has(key)) groups.set(key, { key, fams: t.combo, list: [] })
+    groups.get(key).list.push(t)
+  }
+  const single = turns.filter(t => !t.mixedTurn)
+  const singleMed = median(single.map(val))
+  const rows = [...groups.values()].map(g => ({
+    ...g, n: g.list.length, mixed: g.fams.length >= 2,
+    med: median(g.list.map(val)), avg: mean(g.list.map(val)),
+    projects: new Set(g.list.map(t => t.p)).size,
+  })).sort((a, b) => b.n - a.n)
+  const total = turns.length
+  const swatches = fams => fams.map(f => el('span', { style: `display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;background:${familyColor(f)}` }))
+  const body = el('tbody', {}, rows.map(r => {
+    const effect = r.mixed && singleMed > 0 && r.med != null ? r.med / singleMed - 1 : null
+    return el('tr', {},
+      el('td', {}, swatches(r.fams), ' ', el('span', { class: 'name' }, r.key), r.mixed ? el('span', { class: 'badge', style: 'margin-left:8px' }, 'mixed') : null),
+      el('td', { class: 'r num' }, String(r.n), el('div', { class: 'muted small' }, `${Math.round((r.n / total) * 100)}% of prompts`)),
+      el('td', { class: 'r num' }, fmt(r.med)),
+      el('td', { class: 'r num muted' }, fmt(r.avg)),
+      el('td', { class: 'r num muted' }, String(r.projects)),
+      el('td', { class: 'r' }, r.mixed ? effectCell({ effect }) : el('span', { class: 'muted small' }, 'single model')))
+  }))
+  return el('section', { class: 'block' },
+    el('div', { class: 'block-head' }, el('h3', {}, 'Every model combination'),
+      el('span', { class: 'note' }, `a prompt counts a model when it did 5% or more of the prompt's cost · single-model median ${fmt(singleMed)}`)),
+    el('div', { class: 'card' }, el('div', { class: 'table-wrap' }, el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {}, 'Models in the prompt'), el('th', { class: 'r' }, 'Prompts'), el('th', { class: 'r' }, `Median ${measureLabel()}`),
+        el('th', { class: 'r' }, 'Average'), el('th', { class: 'r' }, 'Projects'), el('th', { class: 'r' }, 'vs single-model prompts'))),
+      body))),
+    el('p', { class: 'too-few' }, 'This table pools every project, like the "Everything" method; the table above uses the method you picked. Haiku often joins a prompt through subagents or quick background calls.'))
+}
+
+// ---- projects side by side
+function renderProjects(turns) {
+  const by = new Map()
+  for (const t of turns) {
+    if (!by.has(t.p)) by.set(t.p, [])
+    by.get(t.p).push(t)
+  }
+  const rows = [...by].map(([p, list]) => {
+    const fam = {}
+    for (const t of list) for (const [f, c] of Object.entries(t.fam)) fam[f] = (fam[f] ?? 0) + c
+    const tags = { addon: new Set(), mcp: new Set(), skill: new Set() }
+    for (const t of list) for (const k of Object.keys(tags)) for (const n of t.tags[k]) tags[k].add(n)
+    for (const n of PROJECT_ADDONS.get(p) ?? []) tags.addon.add(n)
+    return {
+      p, label: PROJECTS[p]?.label ?? p, list, fam, tags,
+      sessions: new Set(list.map(t => t.sid)).size, turns: list.length,
+      prompts: list.filter(t => t.o === 'h').length,
+      value: median(list.map(val)), avg: mean(list.map(val)),
+      total: list.reduce((a, t) => a + t.cost, 0),
+      promptLen: median(list.filter(t => t.o === 'h' && t.pc > 0).map(t => t.pc)),
+      context: median(list.filter(t => t.cx > 0).map(t => t.cx)),
+      files: PROJECTS[p]?.size?.files ?? null,
+      size: PROJECTS[p]?.size ?? null,
+    }
+  })
+  const { key, dir } = state.sort
+  const pick = r => key === 'label' ? r.label.toLowerCase() : r[key] ?? -1
+  rows.sort((a, b) => (pick(a) < pick(b) ? -1 : pick(a) > pick(b) ? 1 : 0) * dir)
+  const max = Math.max(...rows.map(r => r.value ?? 0), 0)
+  const th = (k, label, right) => el('th', {
+    class: 'sortable' + (right ? ' r' : ''),
+    onclick: () => set({ sort: { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'label' ? 1 : -1) } }),
+  }, label, state.sort.key === k ? el('span', { class: 'arrow' }, dir > 0 ? ' ↑' : ' ↓') : null)
+
+  const body = el('tbody', {}, rows.map(r => {
+    const famTotal = Object.values(r.fam).reduce((a, b) => a + b, 0)
+    const tags = [
+      ...[...r.tags.addon].map(n => el('span', { class: 'tag' }, addonLabel(n))),
+      ...[...r.tags.mcp].map(n => el('span', { class: 'tag' }, serverLabel(n))),
+      ...[...r.tags.skill].map(n => el('span', { class: 'tag' }, n)),
+    ]
+    return el('tr', {},
+      el('td', {}, el('div', { class: 'name' }, r.label), el('div', { class: 'muted small' }, `${r.sessions} session${r.sessions === 1 ? '' : 's'} · ${money(r.total)}`)),
+      el('td', { class: 'r num' }, String(r.prompts)),
+      el('td', { class: 'r' }, el('div', { class: 'hbar' }, el('span', { class: 'num' }, fmt(r.value)),
+        el('div', { class: 'track' }, el('div', { class: 'fill', style: `width:${max ? (r.value / max) * 100 : 0}%` })))),
+      el('td', { class: 'r num muted' }, fmt(r.avg)),
+      el('td', { class: 'r num' }, r.promptLen == null ? '—' : `${Math.round(r.promptLen)} ch`),
+      el('td', { class: 'r num' }, tokens(r.context)),
+      el('td', { class: 'r num', title: r.size ? `${r.size.files.toLocaleString()} files, ${bytes(r.size.bytes)}${r.size.isPartial ? ' (stopped counting at 50,000 files)' : ''}, measured ${new Date(r.size.at).toLocaleDateString()}` : 'folder not found' },
+        r.size ? `${r.size.files.toLocaleString()}${r.size.isPartial ? '+' : ''}` : '—',
+        r.size ? el('div', { class: 'muted small' }, bytes(r.size.bytes)) : null),
+      el('td', {}, el('div', { class: 'mix', title: FAMILY_ORDER.filter(f => r.fam[f] > 0).map(f => `${f} ${Math.round((r.fam[f] / famTotal) * 100)}%`).join(' · ') },
+        FAMILY_ORDER.filter(f => r.fam[f] > 0).map(f => el('span', { style: `width:${(r.fam[f] / famTotal) * 100}%;background:${familyColor(f)}` })))),
+      el('td', {}, tags.slice(0, 5), tags.length > 5 ? el('span', { class: 'muted small' }, ` +${tags.length - 5}`) : null))
+  }))
+  const famsUsed = FAMILY_ORDER.filter(f => rows.some(r => r.fam[f] > 0))
+  return el('section', { class: 'block' },
+    el('div', { class: 'block-head' }, el('h3', {}, 'Projects side by side'), el('span', { class: 'note' }, 'click a column to sort')),
+    el('div', { class: 'card' }, el('div', { class: 'table-wrap' }, el('table', {},
+      el('thead', {}, el('tr', {}, th('label', 'Project'), th('prompts', 'Prompts', true), th('value', `Median ${measureLabel()}`, true),
+        th('avg', 'Average', true), th('promptLen', 'Prompt length', true), th('context', 'Context', true), th('files', 'Files', true),
+        el('th', {}, 'Model mix (cost)'), el('th', {}, 'Add-ons, MCP & skills'))),
+      body))),
+    el('p', { class: 'too-few' }, 'Prompt length and context are medians per prompt (context = tokens Claude was reading). Files: the project folder now, without .git, node_modules or build output.'),
+    el('div', { class: 'legend' }, famsUsed.map(f => el('span', {}, el('span', { class: 'sw', style: `background:${familyColor(f)}` }), f))))
+}
+
+// ---------------------------------------------------------------- theme & start
+function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme') }
+try { applyTheme(localStorage.getItem('ccm-theme')) } catch { }
+document.getElementById('theme').addEventListener('click', () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches)
+  const next = dark ? 'light' : 'dark'
+  applyTheme(next)
+  try { localStorage.setItem('ccm-theme', next) } catch { }
+  render()
+})
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render)
+if (DATA) document.getElementById('meta').textContent = `Built ${new Date(DATA.builtAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+render()
+</script>
+</body>
+</html>

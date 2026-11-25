@@ -53,6 +53,10 @@ header.top {
 header.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
 header.top .meta { color: var(--text-3); font-size: 12.5px; }
 header.top .spacer { flex: 1; }
+nav.tabs { display: flex; gap: 4px; }
+nav.tabs a { padding: 5px 12px; border-radius: 8px; color: var(--text-2); text-decoration: none; font-size: 13.5px; }
+nav.tabs a.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+nav.tabs a:hover { background: var(--surface-2); }
 .icon-btn {
   border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px;
   padding: 4px 10px; cursor: pointer; font-size: 13px;
@@ -188,6 +192,7 @@ table.data tr.static { cursor: default; }
 <body>
 <header class="top">
   <h1>Claude Code metrics</h1>
+  <nav class="tabs"><a href="dashboard.html" class="on">Dashboard</a><a href="compare.html">Compare projects</a></nav>
   <span class="meta" id="meta"></span>
   <span class="spacer"></span>
   <button class="icon-btn" id="theme" title="Switch light / dark">◐ Theme</button>
@@ -259,7 +264,9 @@ const prettyModel = m => {
 const isBuiltin = server => /^ccd_/.test(server)
 
 // ---------------------------------------------------------------- data
-const SESSIONS = (DATA?.sessions ?? []).map(s => ({ ...s, units: unitsOf(s) }))
+const SESSIONS = (DATA?.sessions ?? []).map(s => ({
+  ...s, addons: [...new Set([...(s.addons ?? []), ...(s.projectAddons ?? [])])], units: unitsOf(s),
+}))
 const BY_ID = new Map(SESSIONS.map(s => [s.id, s]))
 const PROJECTS = DATA?.projects ?? {}
 

@@ -12,7 +12,7 @@
 // The store outlives Claude Code's own logs (which it deletes after 30 days
 // by default), so the dashboard keeps your history.
 //
-// Usage: node build.mjs [--data <dir>] [--projects <dir>] [--cap-mb 20] [--open]
+// Usage: node build.mjs [--data <dir>] [--projects <dir>] [--cap-mb 20] [--open] [--page compare]
 
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -23,7 +23,10 @@ import { execFile, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const STORE_VERSION = 1
+// 2: prompt length (pc) and context size (cx) per turn
+// 3: prompt snippet (pt), effort (ef), tool errors (er), compactions (cp),
+//    tool counts (tl), add-ons used (ad) and subagent usage (sm) per turn
+const STORE_VERSION = 5 // 4: compactions before a log's first prompt count toward it; 5: compaction summaries are not prompts
 
 const args = parseArgs(process.argv.slice(2))
 const HOME = os.homedir()
@@ -34,6 +37,7 @@ const CAP = (Number(args['cap-mb']) || 20) * 1024 * 1024
 const STORE_FILE = path.join(DATA, 'metrics.json')
 const MOD_TURNS = path.join(DATA, 'turns')
 const PAGE_FILE = path.join(DATA, 'dashboard.html')
+const COMPARE_FILE = path.join(DATA, 'compare.html')
 
 function parseArgs(argv) {
   const out = {}
@@ -54,7 +58,8 @@ const log = (...m) => { if (!args.quiet) console.error('[dashboard]', ...m) }
 // Each is found by a skill it runs, a word in a shell command, an MCP server,
 // or a folder it leaves in the project. Add more here.
 const ADDONS = [
-  { id: 'graphify', label: 'graphify', skills: ['graphify'], command: /\bgraphify\b/i, folder: 'graphify-out' },
+  // `path`: a file read or searched under it counts as using the add-on (its output)
+  { id: 'graphify', label: 'graphify', skills: ['graphify'], command: /\bgraphify\b/i, path: /graphify-out/i, folder: 'graphify-out' },
 ]
 
 // ---- cost: fallback prices when ccusage has no figure ------------------------
@@ -96,8 +101,11 @@ async function* records(file) {
   }
 }
 
-function newTurn(start, origin) {
-  return { s: start, last: start, o: origin, a: 0, m: {}, n: 0, mcp: {}, sk: {}, tl: {}, usage: new Map() }
+function newTurn(start, origin, promptChars = 0, snippet = null) {
+  return {
+    s: start, last: start, o: origin, a: 0, pc: promptChars, pt: snippet,
+    m: {}, n: 0, mcp: {}, sk: {}, tl: {}, ad: {}, er: 0, cp: 0, ef: null, usage: new Map(),
+  }
 }
 
 // Records a tool call on a turn and on the session's totals.
@@ -110,6 +118,7 @@ function addTool(session, turn, name, input, seen, id) {
     session.mcp[server] = (session.mcp[server] ?? 0) + 1
   } else {
     session.tools[name] = (session.tools[name] ?? 0) + 1
+    turn.tl[name] = (turn.tl[name] ?? 0) + 1
   }
   if (name === 'Skill' && input?.skill) {
     const skill = String(input.skill).replace(/^\//, '')
@@ -121,10 +130,15 @@ function addTool(session, turn, name, input, seen, id) {
     session.agents[agent] = (session.agents[agent] ?? 0) + 1
   }
   const command = (name === 'Bash' || name === 'PowerShell') ? String(input?.command ?? '') : ''
+  const target = String(input?.file_path ?? input?.path ?? input?.notebook_path ?? '')
   for (const a of ADDONS) {
     if ((a.skills && input?.skill && a.skills.includes(String(input.skill).replace(/^\//, ''))) ||
         (a.command && command && a.command.test(command)) ||
-        (a.mcp && name.startsWith(`mcp__${a.mcp}__`))) session.addons[a.id] = true
+        (a.path && target && a.path.test(target)) ||
+        (a.mcp && name.startsWith(`mcp__${a.mcp}__`))) {
+      session.addons[a.id] = true
+      turn.ad[a.id] = (turn.ad[a.id] ?? 0) + 1
+    }
   }
 }
 
@@ -150,11 +164,19 @@ async function parseSession(id, mainFile, sideFiles) {
   const toolIds = new Set()
   let turn = null
   let titleIsCustom = false
+  let pendingCompactions = 0
 
   for await (const o of records(mainFile)) {
     if (o.type === 'custom-title' && o.customTitle) { session.title = o.customTitle; titleIsCustom = true; continue }
     if (o.type === 'agent-name' && o.agentName && !titleIsCustom) { session.title = o.agentName; continue }
     if (o.type === 'summary' && o.summary && !session.title) { session.title = o.summary; continue }
+    if (o.type === 'system' && o.subtype === 'compact_boundary') {
+      session.compactions = (session.compactions ?? 0) + 1
+      // counts toward the turn under way, or the next one when none is
+      if (turn) turn.cp++
+      else pendingCompactions++
+      continue
+    }
     if (o.type !== 'user' && o.type !== 'assistant') continue
     const t = ts(o)
     if (t === null) continue
@@ -165,13 +187,25 @@ async function parseSession(id, mainFile, sideFiles) {
     if (o.type === 'user') {
       const content = o.message?.content
       const isResult = Array.isArray(content) && content.some(b => b?.type === 'tool_result')
-      if (isResult || o.isSidechain) { if (turn) turn.last = Math.max(turn.last, t); continue }
+      if (isResult || o.isSidechain) {
+        if (turn) {
+          turn.last = Math.max(turn.last, t)
+          if (isResult) turn.er += content.filter(b => b?.type === 'tool_result' && b.is_error).length
+        }
+        continue
+      }
       const text = textOf(content)
       if (/^\[Request interrupted by user/.test(text)) { if (turn) turn.a = 1; continue }
-      if (o.isMeta) continue
+      // a compaction's summary is logged as a user message (with an older
+      // timestamp); it belongs to the turn under way, not a new prompt
+      if (o.isMeta || o.isCompactSummary || o.isVisibleInTranscriptOnly) continue
       if (/^<(local-command-stdout|local-command-caveat|command-stdout|bash-stdout)/.test(text)) continue
       const kind = o.origin?.kind
-      turn = newTurn(t, kind === undefined || kind === 'human' ? 'h' : 'x')
+      const isHuman = kind === undefined || kind === 'human'
+      const snippet = isHuman && !text.startsWith('<') ? text.replace(/\s+/g, ' ').trim().slice(0, 100) : null
+      turn = newTurn(t, isHuman ? 'h' : 'x', isHuman ? text.length : 0, snippet)
+      turn.cp += pendingCompactions
+      pendingCompactions = 0
       session.turns.push(turn)
       if (!session.prompt && turn.o === 'h' && !text.startsWith('<')) session.prompt = text.replace(/\s+/g, ' ').trim().slice(0, 90)
       continue
@@ -182,11 +216,13 @@ async function parseSession(id, mainFile, sideFiles) {
     if (!msg) continue
     if (!turn) { turn = newTurn(t, 'x'); session.turns.push(turn) }
     turn.last = Math.max(turn.last, t)
+    if (o.effort && !o.isSidechain) turn.ef = o.effort
     for (const b of Array.isArray(msg.content) ? msg.content : []) {
       if (b?.type === 'tool_use' && b.name) addTool(session, turn, b.name, b.input, toolIds, b.id)
     }
     if (msg.usage && msg.model && msg.model !== '<synthetic>') {
-      addUsage(turn, `${msg.id ?? ''}:${o.requestId ?? ''}`, msg.model, msg.usage)
+      // older logs kept subagents' responses inline, marked as a sidechain
+      addUsage(turn, `${o.isSidechain ? 'sub:' : ''}${msg.id ?? ''}:${o.requestId ?? ''}`, msg.model, msg.usage)
     }
   }
 
@@ -208,18 +244,28 @@ async function parseSession(id, mainFile, sideFiles) {
       }
       const msg = o.message
       if (msg.usage && msg.model && msg.model !== '<synthetic>') {
-        addUsage(owner, `${msg.id ?? ''}:${o.requestId ?? ''}`, msg.model, msg.usage)
+        addUsage(owner, `sub:${msg.id ?? ''}:${o.requestId ?? ''}`, msg.model, msg.usage)
       }
     }
   }
 
-  // Fold each turn's responses into per-model totals; drop turns that never
-  // reached the model (a local command, a /clear).
+  // Fold each turn's responses into per-model totals (sm: the subagents'
+  // share of them); drop turns that never reached the model (a local
+  // command, a /clear).
   const out = []
   for (const x of session.turns) {
-    for (const [model, u] of x.usage.values()) {
+    x.cx = 0
+    x.sm = {}
+    for (const [key, [model, u]] of x.usage) {
       const acc = x.m[model] ??= [0, 0, 0, 0, 0, 0]
       for (let i = 0; i < 5; i++) acc[i] += u[i]
+      if (key.startsWith('sub:')) {
+        const sub = x.sm[model] ??= [0, 0, 0, 0, 0, 0]
+        for (let i = 0; i < 5; i++) sub[i] += u[i]
+      } else {
+        // the context: what the main conversation's largest request read
+        x.cx = Math.max(x.cx, u[IN] + u[CW] + u[CR])
+      }
     }
     if (Object.keys(x.m).length === 0) continue
     out.push(compactTurn(x))
@@ -235,8 +281,17 @@ function compactTurn(x) {
   if (x.o !== 'h') t.o = x.o
   if (x.a) t.a = 1
   if (x.n) t.n = x.n
+  if (x.pc) t.pc = x.pc
+  if (x.pt) t.pt = x.pt
+  if (x.cx) t.cx = x.cx
+  if (x.ef) t.ef = x.ef
+  if (x.er) t.er = x.er
+  if (x.cp) t.cp = x.cp
+  if (Object.keys(x.tl).length) t.tl = x.tl
   if (Object.keys(x.mcp).length) t.mcp = x.mcp
   if (Object.keys(x.sk).length) t.sk = x.sk
+  if (Object.keys(x.ad).length) t.ad = x.ad
+  if (Object.keys(x.sm).length) t.sm = x.sm
   return t
 }
 
@@ -321,6 +376,11 @@ function priceSession(session, costs) {
         ? (c * weight(u)) / totals[model]
         : (weight(u) * inputPrice(model)) / 1e6
     }
+    // the subagents' share, at the same rate as the turn's own figure for that model
+    for (const [model, sub] of Object.entries(t.sm ?? {})) {
+      const all = t.m[model]
+      sub[COST] = all && weight(all) > 0 ? (all[COST] * weight(sub)) / weight(all) : 0
+    }
   }
 }
 
@@ -372,6 +432,7 @@ function mergeModTurns(session, rec) {
     for (const m of Object.keys(r.mcp ?? {})) session.mcp[m] = (session.mcp[m] ?? 0) + r.mcp[m]
   }
   for (const s of rec.mcpConnected ?? []) (session.mcpConnected ??= {})[s] = true
+  for (const a of rec.addonsPresent ?? []) (session.addonsPresent ??= {})[a] = true
   turns.sort((a, b) => a.s - b.s)
   session.first = turns[0]?.s ?? session.first
   session.last = turns.length ? Math.max(session.last ?? 0, ...turns.map(x => x.s + (x.d ?? 0))) : session.last
@@ -432,9 +493,38 @@ function projectOf(cwd) {
 async function loadStore() {
   try {
     const s = JSON.parse(await fsp.readFile(STORE_FILE, 'utf8'))
-    if (s?.version === STORE_VERSION && s.sessions) return s
+    if (s?.sessions) {
+      // An older store: re-read every log still on disk to fill the new
+      // fields; sessions whose logs are gone keep what they had.
+      if (s.version !== STORE_VERSION) { s.stamps = {}; s.version = STORE_VERSION }
+      return s
+    }
   } catch { /* first run */ }
   return { version: STORE_VERSION, stamps: {}, sessions: {} }
+}
+
+// ---- project size, as it stands now ----------------------------------------------
+// Files and bytes under the folder, leaving out what tools generate
+// (.git, node_modules, build output). Bounded, so a huge folder stays quick.
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__', 'dist', 'build', 'target', '.next', 'Library', 'Temp', 'obj', '.cache'])
+const SIZE_LIMIT = 50_000
+
+async function projectSize(dir) {
+  let files = 0, bytes = 0, isPartial = false
+  const stack = [dir]
+  while (stack.length) {
+    const d = stack.pop()
+    for (const e of await listDir(d)) {
+      if (files >= SIZE_LIMIT) { isPartial = true; break }
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) stack.push(path.join(d, e.name)) }
+      else if (e.isFile()) {
+        files++
+        try { bytes += (await fsp.stat(path.join(d, e.name))).size } catch { }
+      }
+    }
+    if (isPartial) break
+  }
+  return { files, bytes, isPartial }
 }
 
 async function main() {
@@ -489,6 +579,8 @@ async function main() {
   if (folded) log(`folded ${folded} old sessions into daily totals to stay under ${CAP / 1024 / 1024} MB`)
 
   store.builtAt = Date.now()
+  await writePage(store) // also measures project sizes into the store
+
   const storeText = JSON.stringify(store)
   await fsp.writeFile(STORE_FILE + '.tmp', storeText)
   await fsp.rename(STORE_FILE + '.tmp', STORE_FILE)
@@ -500,24 +592,34 @@ async function main() {
     if (lastEnd < stale) await fsp.unlink(path.join(MOD_TURNS, `${id}.json`)).catch(() => {})
   }
 
-  await writePage(store)
-  log(`store ${(Buffer.byteLength(storeText) / 1024 / 1024).toFixed(1)} MB, page written in ${((Date.now() - t0) / 1000).toFixed(1)}s`)
-  console.log(PAGE_FILE)
-  if (args.open) openFile(PAGE_FILE)
+  log(`store ${(Buffer.byteLength(storeText) / 1024 / 1024).toFixed(1)} MB, pages written in ${((Date.now() - t0) / 1000).toFixed(1)}s`)
+  const page = args.page === 'compare' ? COMPARE_FILE : PAGE_FILE
+  console.log(page)
+  if (args.open) openFile(page)
 }
 
 async function writePage(store) {
   const projects = {}
   const sessions = []
+  store.sizes ??= {}
   for (const s of Object.values(store.sessions)) {
     const p = projectOf(s.cwd)
-    projects[p.key] ??= { label: p.label, path: p.path }
+    if (!projects[p.key]) {
+      projects[p.key] = { label: p.label, path: p.path }
+      // size of the folder now; re-measured at most once a day
+      if (p.key !== 'desktop-scratch' && p.path && fs.existsSync(p.path)) {
+        const known = store.sizes[p.key]
+        if (!known || Date.now() - known.at > 86_400_000) store.sizes[p.key] = { ...(await projectSize(p.path)), at: Date.now() }
+        projects[p.key].size = store.sizes[p.key]
+      }
+    }
     sessions.push({
       id: s.id, p: p.key, title: s.title || s.prompt || null, first: s.first, last: s.last,
       ver: s.ver ?? null, ep: s.ep ?? null,
       turns: s.turns ?? [], days: s.days ?? [],
       tools: s.tools, mcp: s.mcp, skills: s.skills, agents: s.agents,
-      addons: Object.keys({ ...s.addons, ...s.projectAddons }),
+      addons: Object.keys(s.addons ?? {}), // used in this session
+      projectAddons: Object.keys(s.projectAddons ?? {}), // left a folder in the project
       mcpConnected: Object.keys(s.mcpConnected ?? {}),
     })
   }
@@ -527,9 +629,11 @@ async function writePage(store) {
     addons: ADDONS.map(a => ({ id: a.id, label: a.label })),
     projects, sessions,
   }
-  const template = await fsp.readFile(path.join(HERE, 'template.html'), 'utf8')
   const json = JSON.stringify(data).replace(/</g, '\\u003c')
-  await fsp.writeFile(PAGE_FILE, template.replace('/*__DATA__*/null', () => json))
+  for (const [templateName, out] of [['template.html', PAGE_FILE], ['compare-template.html', COMPARE_FILE]]) {
+    const template = await fsp.readFile(path.join(HERE, templateName), 'utf8')
+    await fsp.writeFile(out, template.replace('/*__DATA__*/null', () => json))
+  }
 }
 
 function openFile(file) {
