@@ -35,6 +35,24 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 
 All costs are estimates from your local logs; your bill is the authority.
 
+## Dashboard
+
+**📊 Dashboard** in the bar's header (or `/ccusage-bar dashboard`) opens a page in your browser with every project and session you've run in Claude Code:
+
+- **Charts over time:** average turn time (with ▲ markers where MCP servers were used), tokens (fresh input, cache writes, cache reads, output), cost by project, model mix by family or by model (share of cost or of tokens), cache hit rate and activity.
+- **Navigation:** pick a project in the sidebar, or open a session from the sessions table to see it turn by turn. The browser's back button works, and each view has its own link.
+- **Tools & add-ons:** the MCP servers, skills, subagents and add-ons (such as graphify) each project or session used. Click one to see only the sessions that used it.
+- **Period:** 7 days, 30 days, 90 days, a year, or all time.
+
+How it gets its data:
+
+- It reads Claude Code's own session logs (`~/.claude/projects`), so your history from before you installed the mod shows up too. Turn times from the logs are estimates: the time from your message to Claude's last reply.
+- From now on the mod also records each turn as it finishes, with its exact time. Those records and the imported history are kept in the plugin's data folder, so the dashboard keeps your history after Claude Code deletes old logs (after 30 days by default). The mod imports the logs once a day in the background, so this works even if you never open the dashboard.
+- The saved metrics are capped at 20 MB. Past that, the oldest sessions are folded into daily totals, so long-term charts keep working.
+- Costs come from ccusage, split across each session's turns.
+- The page is a single file with your data built in; nothing leaves your machine. Press **📊 Dashboard** again to update it. Charts load Chart.js from cdnjs, so the first view needs an internet connection.
+- The desktop app's own tools (its task list and summary box) count as MCP servers named `ccd_*`. The dashboard leaves them out of the MCP markers unless you tick **Count the app's built-in MCP tools**.
+
 ## Requirements
 
 - Claude Code with mod support. The full bar with gauges and Tally draws in the Claude desktop app; terminals get a compact text line.
@@ -43,6 +61,7 @@ All costs are estimates from your local logs; your bill is the authority.
   ```
   npm install -g ccusage
   ```
+- [Node.js](https://nodejs.org) on your PATH for the dashboard (ccusage needs it too).
 
 ## Install
 
@@ -67,6 +86,7 @@ In the desktop app, where `/plugin` does not run: click **+** next to the prompt
 - `/ccusage-bar hide` hides the bar.
 - `/ccusage-bar show` brings it back.
 - `/ccusage-bar refresh` re-reads the figures (they also refresh every minute and after each turn).
+- `/ccusage-bar dashboard` builds the dashboard and opens it in your browser.
 
 ## Credits
 

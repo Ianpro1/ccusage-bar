@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code Metrics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface: #fcfcfb; --surface-2: #f0efec; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7974; --grid: rgba(11, 11, 11, 0.07);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948; --other: #a3a29b;
+  --accent: #2a78d6; --accent-soft: rgba(42, 120, 214, 0.10);
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #33332f;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: rgba(240, 239, 236, 0.08);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767; --other: #6b6a64;
+    --accent: #3987e5; --accent-soft: rgba(57, 135, 229, 0.16);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #33332f;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86; --grid: rgba(240, 239, 236, 0.08);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767; --other: #6b6a64;
+  --accent: #3987e5; --accent-soft: rgba(57, 135, 229, 0.16);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---- header ---- */
+header.top {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+header.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
+header.top .meta { color: var(--text-3); font-size: 12.5px; }
+header.top .spacer { flex: 1; }
+.icon-btn {
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px;
+  padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+.icon-btn:hover { border-color: var(--text-3); }
+
+/* ---- layout ---- */
+.layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: calc(100vh - 49px); }
+aside.side {
+  border-right: 1px solid var(--border); background: var(--surface);
+  padding: 14px 10px; position: sticky; top: 49px; height: calc(100vh - 49px); overflow: auto;
+}
+.side h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); margin: 6px 8px 8px; font-weight: 600; }
+.search {
+  width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px;
+}
+.search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.proj-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.proj-list button {
+  width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; text-align: left;
+  border: 0; background: none; padding: 7px 8px; border-radius: 8px; cursor: pointer;
+}
+.proj-list button:hover { background: var(--surface-2); }
+.proj-list button.active { background: var(--accent-soft); }
+.proj-list .name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-list .cost { color: var(--text-2); font-size: 12.5px; }
+.proj-list .sub { grid-column: 1 / -1; color: var(--text-3); font-size: 12px; }
+
+main { padding: 18px 22px 40px; min-width: 0; }
+.crumbs { display: flex; gap: 6px; align-items: center; color: var(--text-3); font-size: 13px; flex-wrap: wrap; }
+.crumbs button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; }
+.crumbs .here { color: var(--text); font-weight: 550; }
+.title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
+.title-row h2 { font-size: 22px; margin: 0; font-weight: 650; }
+.title-row .sub { color: var(--text-3); font-size: 13px; }
+
+/* filter row */
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 5px 11px; cursor: pointer; font-size: 13px; color: var(--text-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.check { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); font-size: 13px; cursor: pointer; }
+.filter-label { color: var(--text-3); font-size: 12.5px; }
+.active-filter {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px;
+  background: var(--accent-soft); font-size: 13px;
+}
+.active-filter button { border: 0; background: none; cursor: pointer; padding: 0 4px; color: var(--text-2); }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.tile .k { color: var(--text-3); font-size: 12.5px; }
+.tile .v { font-size: 22px; font-weight: 650; margin-top: 2px; }
+.tile .h { color: var(--text-3); font-size: 12px; margin-top: 2px; }
+
+/* cards */
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px 12px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.card-head h3 { margin: 0; font-size: 14px; font-weight: 620; }
+.card-head .note { color: var(--text-3); font-size: 12.5px; }
+.card-head .spacer { flex: 1; }
+.chart-box { position: relative; height: 250px; }
+.chart-box.tall { height: 290px; }
+.empty { color: var(--text-3); padding: 30px 0; text-align: center; }
+
+.mix-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 14px; align-items: start; }
+table.mini { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.mini td { padding: 4px 2px; border-bottom: 1px solid var(--border); }
+table.mini td.r { text-align: right; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+
+/* chips */
+.legend-groups { display: grid; gap: 10px; }
+.legend-group { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.legend-group .lg-title { color: var(--text-3); font-size: 12px; width: 86px; flex: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 999px; padding: 3px 10px; font-size: 12.5px; cursor: pointer;
+}
+.chip:hover { border-color: var(--text-3); }
+.chip.on { background: var(--accent-soft); border-color: var(--accent); }
+.chip.idle { opacity: .6; }
+.chip .c { color: var(--text-3); }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+/* tables */
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th {
+  text-align: left; font-weight: 600; color: var(--text-2); font-size: 12.5px; padding: 8px 8px;
+  border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none;
+}
+table.data th.r, table.data td.r { text-align: right; }
+table.data th .arrow { color: var(--accent); }
+table.data td { padding: 8px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.data tbody tr { cursor: pointer; }
+table.data tbody tr:hover { background: var(--surface-2); }
+table.data tr.static { cursor: default; }
+.s-title { font-weight: 550; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-sub { color: var(--text-3); font-size: 12px; }
+.bar { display: flex; height: 7px; width: 90px; border-radius: 4px; overflow: hidden; background: var(--surface-2); gap: 1px; }
+.bar span { display: block; height: 100%; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 11.5px; margin: 1px 2px 1px 0; white-space: nowrap; }
+.tag.mcp { border-color: color-mix(in srgb, var(--s7) 55%, var(--border)); }
+.tag.addon { border-color: color-mix(in srgb, var(--s3) 60%, var(--border)); }
+.muted { color: var(--text-3); }
+.share { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.share .meter { width: 44px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; display: inline-block; }
+.share .meter span { display: block; height: 100%; background: var(--s1); border-radius: 3px; }
+.more { margin-top: 10px; }
+.est { color: var(--text-3); font-size: 11px; }
+
+@media (max-width: 1150px) {
+  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .mix-wrap { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 820px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  aside.side { position: static; height: auto; max-height: 320px; border-right: 0; border-bottom: 1px solid var(--border); }
+  main { padding: 16px; }
+  header.top { padding: 10px 16px; }
+  header.top .meta { display: none; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Claude Code metrics</h1>
+  <span class="meta" id="meta"></span>
+  <span class="spacer"></span>
+  <button class="icon-btn" id="theme" title="Switch light / dark">◐ Theme</button>
+</header>
+<div class="layout">
+  <aside class="side">
+    <input class="search" id="proj-search" type="search" placeholder="Find a project…" aria-label="Find a project">
+    <h2 id="proj-count">Projects</h2>
+    <ul class="proj-list" id="projects"></ul>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null
+
+// ---------------------------------------------------------------- helpers
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue
+    if (k === 'class') n.className = v
+    else if (k === 'html') n.innerHTML = v
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v)
+    else n.setAttribute(k, v === true ? '' : v)
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid instanceof Node ? kid : String(kid))
+  return n
+}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+const DAY = 86_400_000
+
+const money = n => n == null ? '—' : n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : n >= 100 ? `$${Math.round(n)}` : n >= 1 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(3)}` : '$0'
+const tokens = n => n == null ? '—' : n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n))
+const dur = ms => {
+  if (ms == null || !isFinite(ms)) return '—'
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+const pct = n => n == null || !isFinite(n) ? '—' : `${Math.round(n)}%`
+const fmtDate = ms => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: new Date(ms).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+const fmtDateTime = ms => new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+const ago = ms => {
+  const d = Date.now() - ms
+  if (d < 60_000) return 'just now'
+  if (d < 3_600_000) return `${Math.round(d / 60_000)}m ago`
+  if (d < DAY) return `${Math.round(d / 3_600_000)}h ago`
+  if (d < 30 * DAY) return `${Math.round(d / DAY)}d ago`
+  return fmtDate(ms)
+}
+
+// ---------------------------------------------------------------- models
+const family = m => /opus/i.test(m) ? 'Opus' : /sonnet/i.test(m) ? 'Sonnet' : /haiku/i.test(m) ? 'Haiku' : /fable/i.test(m) ? 'Fable' : /mythos/i.test(m) ? 'Mythos' : 'Other'
+const FAMILY_ORDER = ['Sonnet', 'Opus', 'Haiku', 'Fable', 'Mythos', 'Other']
+const FAMILY_SLOT = { Sonnet: 's1', Opus: 's2', Haiku: 's3', Fable: 's4', Mythos: 's7' }
+const prettyModel = m => {
+  const core = m.replace(/^claude-/, '').replace(/-\d{8}$/, '')
+  const parts = core.split('-')
+  const fam = parts.find(p => /^[a-z]+$/i.test(p)) ?? parts[0]
+  const ver = parts.filter(p => /^\d+$/.test(p)).join('.')
+  return `${fam[0].toUpperCase()}${fam.slice(1)}${ver ? ' ' + ver : ''}`
+}
+
+// The desktop app's own tools (task list, wrap-up box…) reach Claude as MCP
+// servers named ccd_*; they're not "MCP use" for the markers unless asked.
+const isBuiltin = server => /^ccd_/.test(server)
+
+// ---------------------------------------------------------------- data
+const SESSIONS = (DATA?.sessions ?? []).map(s => ({ ...s, units: unitsOf(s) }))
+const BY_ID = new Map(SESSIONS.map(s => [s.id, s]))
+const PROJECTS = DATA?.projects ?? {}
+
+function unitsOf(s) {
+  const out = []
+  for (const t of s.turns ?? []) {
+    out.push({
+      s: t.s, k: 1, dk: t.a ? 0 : 1, d: t.a ? 0 : (t.d ?? 0), ab: t.a ? 1 : 0, n: t.n ?? 0,
+      m: t.m ?? {}, mcp: t.mcp ?? null, sk: t.sk ?? null, o: t.o ?? 'h', x: t.x ? 1 : 0, raw: t, sid: s.id,
+    })
+  }
+  for (const d of s.days ?? []) out.push({ ...d, sk: null, sid: s.id, folded: 1 })
+  return out.sort((a, b) => a.s - b.s)
+}
+
+// fixed colours per model, by all-time cost; the top seven get slots, the rest are Other
+const MODEL_SLOTS = (() => {
+  const cost = {}
+  for (const s of SESSIONS) for (const u of s.units) for (const [m, a] of Object.entries(u.m)) cost[m] = (cost[m] ?? 0) + (a[5] ?? 0)
+  const ranked = Object.keys(cost).sort((a, b) => cost[b] - cost[a])
+  const slots = {}
+  ranked.forEach((m, i) => { slots[m] = i < 7 ? `s${i + 1}` : null })
+  return { slots, order: ranked }
+})()
+
+// projects: fixed colours by all-time cost
+const PROJECT_SLOTS = (() => {
+  const cost = {}
+  for (const s of SESSIONS) for (const u of s.units) for (const a of Object.values(u.m)) cost[s.p] = (cost[s.p] ?? 0) + (a[5] ?? 0)
+  const ranked = Object.keys(cost).sort((a, b) => cost[b] - cost[a])
+  const slots = {}
+  ranked.forEach((p, i) => { slots[p] = i < 7 ? `s${i + 1}` : null })
+  return { slots, order: ranked }
+})()
+
+// ---------------------------------------------------------------- state & routing
+const state = {
+  project: null, session: null, range: '30', mixBy: 'cost', mixLevel: 'family',
+  cacheReads: true, builtin: false, tool: null, search: '', sort: { key: 'last', dir: -1 }, limit: 40,
+}
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1))
+  state.project = h.get('project')
+  state.session = h.get('session')
+  state.range = h.get('range') ?? state.range
+  const tool = h.get('tool')
+  state.tool = tool ? { kind: tool.split(':')[0], name: tool.slice(tool.indexOf(':') + 1) } : null
+}
+function go(patch) {
+  const next = { project: state.project, session: state.session, range: state.range, tool: state.tool, ...patch }
+  const h = new URLSearchParams()
+  if (next.project) h.set('project', next.project)
+  if (next.session) h.set('session', next.session)
+  if (next.range && next.range !== '30') h.set('range', next.range)
+  if (next.tool) h.set('tool', `${next.tool.kind}:${next.tool.name}`)
+  const s = h.toString()
+  if (('#' + s) === location.hash || (s === '' && location.hash === '')) { readHash(); render() }
+  else location.hash = s
+}
+// Opening another project or session starts at the top; a filter keeps your place.
+window.addEventListener('hashchange', () => {
+  const before = `${state.project}|${state.session}`
+  readHash()
+  const moved = before !== `${state.project}|${state.session}`
+  if (moved) state.limit = 40
+  render()
+  if (moved) window.scrollTo({ top: 0 })
+})
+
+// ---------------------------------------------------------------- aggregation
+function acc() {
+  return { k: 0, dk: 0, d: 0, ab: 0, n: 0, cost: 0, inp: 0, cw: 0, cr: 0, out: 0, models: {}, mcp: {}, mcpTurns: 0, sessions: new Set(), projects: {} }
+}
+function addUnit(a, u, projectKey) {
+  a.k += u.k; a.dk += u.dk; a.d += u.d; a.ab += u.ab; a.n += u.n; a.sessions.add(u.sid)
+  let cost = 0
+  for (const [m, x] of Object.entries(u.m)) {
+    a.inp += x[0]; a.cw += x[1]; a.cr += x[2]; a.out += x[3]
+    const c = x[5] ?? 0
+    a.cost += c; cost += c
+    const mm = a.models[m] ??= { cost: 0, tokens: 0 }
+    mm.cost += c; mm.tokens += x[0] + x[1] + x[2] + x[3]
+  }
+  if (projectKey) a.projects[projectKey] = (a.projects[projectKey] ?? 0) + cost
+  let used = false
+  for (const [srv, c] of Object.entries(u.mcp ?? {})) {
+    if (!state.builtin && isBuiltin(srv)) continue
+    a.mcp[srv] = (a.mcp[srv] ?? 0) + c
+    used = true
+  }
+  if (used) a.mcpTurns++
+}
+const avgTurn = a => a.dk > 0 ? a.d / a.dk : null
+const cacheHit = a => { const all = a.inp + a.cw + a.cr; return all > 0 ? (a.cr / all) * 100 : null }
+const totalTokens = a => a.inp + a.cw + a.cr + a.out
+
+function rangeStart() {
+  if (state.range === 'all') return -Infinity
+  const days = Number(state.range)
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  return t.getTime() - (days - 1) * DAY
+}
+
+function toolMatch(s) {
+  const t = state.tool
+  if (!t) return true
+  if (t.kind === 'mcp') return !!(s.mcp?.[t.name] || (s.mcpConnected ?? []).includes(t.name))
+  if (t.kind === 'skill') return !!s.skills?.[t.name]
+  if (t.kind === 'addon') return (s.addons ?? []).includes(t.name)
+  if (t.kind === 'agent') return !!s.agents?.[t.name]
+  return true
+}
+
+function scopeSessions() {
+  return SESSIONS.filter(s => (!state.project || s.p === state.project) && toolMatch(s))
+}
+
+function bucketing(start, end) {
+  const span = (end - start) / DAY
+  if (span <= 45) return 'day'
+  if (span <= 260) return 'week'
+  return 'month'
+}
+function bucketStart(ms, unit) {
+  const d = new Date(ms); d.setHours(0, 0, 0, 0)
+  if (unit === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  if (unit === 'month') d.setDate(1)
+  return d.getTime()
+}
+function nextBucket(ms, unit) {
+  const d = new Date(ms)
+  if (unit === 'day') d.setDate(d.getDate() + 1)
+  else if (unit === 'week') d.setDate(d.getDate() + 7)
+  else d.setMonth(d.getMonth() + 1)
+  return d.getTime()
+}
+function bucketLabel(ms, unit) {
+  const d = new Date(ms)
+  if (unit === 'month') return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+// ---------------------------------------------------------------- charts
+const charts = []
+function clearCharts() { while (charts.length) charts.pop().destroy() }
+
+function baseOptions({ stacked = false, yFmt = v => v, max, legend = true, tooltipLabel, tooltipFilter, onClick } = {}) {
+  const text2 = css('--text-2'), grid = css('--grid'), text3 = css('--text-3')
+  return {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+    interaction: { mode: 'index', intersect: false },
+    onClick,
+    plugins: {
+      legend: { display: legend, position: 'bottom', labels: { color: text2, boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'rectRounded', padding: 12, font: { size: 12 } } },
+      tooltip: {
+        backgroundColor: css('--surface'), titleColor: css('--text'), bodyColor: text2, borderColor: css('--border'), borderWidth: 1,
+        padding: 10, boxPadding: 4, usePointStyle: true,
+        filter: tooltipFilter ?? (item => item.raw !== null && item.raw !== undefined),
+        callbacks: tooltipLabel ? { label: tooltipLabel } : {},
+      },
+    },
+    scales: {
+      x: { stacked, grid: { display: false }, border: { color: grid }, ticks: { color: text3, maxRotation: 0, autoSkip: true, maxTicksLimit: 10, font: { size: 11.5 } } },
+      y: { stacked, beginAtZero: true, max, grid: { color: grid }, border: { display: false }, ticks: { color: text3, callback: yFmt, maxTicksLimit: 6, font: { size: 11.5 } } },
+    },
+  }
+}
+
+function addChart(box, config) {
+  if (typeof Chart === 'undefined') {
+    box.replaceChildren(el('div', { class: 'empty' }, 'Charts need an internet connection the first time (Chart.js loads from cdnjs).'))
+    return
+  }
+  const canvas = el('canvas')
+  box.replaceChildren(canvas)
+  charts.push(new Chart(canvas, config))
+}
+
+const barDataset = (label, data, color, extra = {}) => ({ label, data, backgroundColor: color, borderRadius: 3, borderSkipped: false, maxBarThickness: 34, ...extra })
+
+function card(title, note, opts = {}) {
+  const box = el('div', { class: 'chart-box' + (opts.tall ? ' tall' : '') })
+  const head = el('div', { class: 'card-head' }, el('h3', {}, title), note ? el('span', { class: 'note' }, note) : null, el('span', { class: 'spacer' }), opts.controls ?? null)
+  const c = el('section', { class: 'card' + (opts.wide ? ' wide' : '') }, head, opts.body ?? box)
+  return { card: c, box }
+}
+
+function seg(options, value, onPick) {
+  return el('div', { class: 'seg', role: 'group' }, options.map(([v, label]) =>
+    el('button', { class: v === value ? 'on' : null, 'aria-pressed': v === value ? 'true' : 'false', onclick: () => onPick(v) }, label)))
+}
+
+// ---------------------------------------------------------------- sidebar
+function renderSidebar() {
+  const list = document.getElementById('projects')
+  const q = document.getElementById('proj-search').value.trim().toLowerCase()
+  const stats = {}
+  for (const s of SESSIONS) {
+    const st = stats[s.p] ??= { sessions: 0, cost: 0, last: 0 }
+    st.sessions++
+    st.last = Math.max(st.last, s.last ?? 0)
+    for (const u of s.units) for (const a of Object.values(u.m)) st.cost += a[5] ?? 0
+  }
+  const keys = Object.keys(stats).sort((a, b) => stats[b].last - stats[a].last)
+  document.getElementById('proj-count').textContent = `Projects · ${keys.length}`
+  const total = Object.values(stats).reduce((a, s) => ({ sessions: a.sessions + s.sessions, cost: a.cost + s.cost }), { sessions: 0, cost: 0 })
+  const row = (key, name, sub, cost, title) => el('li', {}, el('button', {
+    class: (state.project ?? null) === key && !state.session ? 'active' : (state.project === key ? 'active' : null),
+    title, onclick: () => go({ project: key, session: null }),
+  }, el('span', { class: 'name' }, name), el('span', { class: 'cost num' }, money(cost)), el('span', { class: 'sub' }, sub)))
+  const items = [row(null, 'All projects', `${total.sessions} sessions`, total.cost, 'Every project')]
+  for (const k of keys) {
+    const p = PROJECTS[k] ?? { label: k, path: k }
+    if (q && !(`${p.label} ${p.path}`.toLowerCase().includes(q))) continue
+    items.push(row(k, p.label, `${stats[k].sessions} session${stats[k].sessions === 1 ? '' : 's'} · ${ago(stats[k].last)}`, stats[k].cost, p.path))
+  }
+  list.replaceChildren(...items)
+}
+document.getElementById('proj-search').addEventListener('input', renderSidebar)
+
+// ---------------------------------------------------------------- overview (all projects or one)
+function renderOverview(main) {
+  const start = rangeStart()
+  const sessions = scopeSessions()
+  const units = []
+  for (const s of sessions) for (const u of s.units) if (u.s >= start) units.push([u, s])
+  units.sort((a, b) => a[0].s - b[0].s)
+  const total = acc()
+  for (const [u, s] of units) addUnit(total, u, s.p)
+
+  const proj = state.project ? PROJECTS[state.project] : null
+  // breadcrumb + title
+  main.append(el('nav', { class: 'crumbs' },
+    proj ? [el('button', { onclick: () => go({ project: null, session: null }) }, 'All projects'), '›', el('span', { class: 'here' }, proj.label)]
+      : el('span', { class: 'here' }, 'All projects')))
+  main.append(el('div', { class: 'title-row' },
+    el('h2', {}, proj ? proj.label : 'All projects'),
+    el('span', { class: 'sub' }, proj ? proj.path : `${Object.keys(PROJECTS).length} projects, ${SESSIONS.length} sessions`)))
+
+  // filters
+  const filters = el('div', { class: 'filters' },
+    el('span', { class: 'filter-label' }, 'Period'),
+    seg([['7', '7 days'], ['30', '30 days'], ['90', '90 days'], ['365', '1 year'], ['all', 'All time']], state.range, v => go({ range: v })),
+    el('label', { class: 'check', title: 'The desktop app\'s own tools (task list, wrap-up) count as MCP servers named ccd_*' },
+      el('input', { type: 'checkbox', checked: state.builtin, onchange: e => { state.builtin = e.target.checked; render() } }), 'Count the app\'s built-in MCP tools'),
+  )
+  if (state.tool) {
+    filters.append(el('span', { class: 'active-filter' }, `Sessions using ${state.tool.name}`,
+      el('button', { 'aria-label': 'Clear filter', onclick: () => go({ tool: null }) }, '✕')))
+  }
+  main.append(filters)
+
+  if (units.length === 0) {
+    main.append(el('div', { class: 'card' }, el('div', { class: 'empty' }, 'No turns in this period. Try a longer period.')))
+    main.append(renderSessionsTable(sessions, start))
+    return
+  }
+
+  // tiles
+  const tile = (k, v, h) => el('div', { class: 'tile' }, el('div', { class: 'k' }, k), el('div', { class: 'v num' }, v), h ? el('div', { class: 'h' }, h) : null)
+  main.append(el('div', { class: 'tiles' },
+    tile('Cost', money(total.cost), `${money(total.cost / Math.max(1, total.sessions.size))} per session`),
+    tile('Tokens', tokens(totalTokens(total)), `${tokens(total.out)} written`),
+    tile('Sessions', String(total.sessions.size), proj ? null : `${Object.keys(total.projects).length} projects`),
+    tile('Turns', String(total.k), total.ab ? `${total.ab} stopped` : `${(total.k / Math.max(1, total.sessions.size)).toFixed(1)} per session`),
+    tile('Avg turn time', dur(avgTurn(total)), 'stopped turns left out'),
+    tile('Cache hit', pct(cacheHit(total)), `${total.mcpTurns} turns used MCP`),
+  ))
+
+  // buckets
+  const first = Math.max(start, units[0][0].s)
+  const last = Math.max(Date.now(), units[units.length - 1][0].s)
+  const unit = bucketing(first, last)
+  const keys = []
+  for (let b = bucketStart(first, unit); b <= last; b = nextBucket(b, unit)) keys.push(b)
+  const index = new Map(keys.map((k, i) => [k, i]))
+  const buckets = keys.map(() => acc())
+  for (const [u, s] of units) {
+    const i = index.get(bucketStart(u.s, unit))
+    if (i !== undefined) addUnit(buckets[i], u, s.p)
+  }
+  const labels = keys.map(k => bucketLabel(k, unit))
+  const per = unit === 'day' ? 'per day' : unit === 'week' ? 'per week' : 'per month'
+
+  const grid = el('div', { class: 'grid' })
+  main.append(grid)
+
+  // 1. average turn time + MCP markers
+  {
+    const { card: c, box } = card('Average turn time', `${per} · ▲ marks periods that used MCP`, { wide: true })
+    grid.append(c)
+    const avg = buckets.map(b => { const v = avgTurn(b); return v == null ? null : v / 1000 })
+    const marks = buckets.map(b => (Object.keys(b.mcp).length ? 0 : null))
+    addChart(box, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Average turn time', data: avg, borderColor: css('--s1'), backgroundColor: css('--s1'), borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25, spanGaps: true },
+          { label: 'Used MCP', data: marks, showLine: false, pointStyle: 'triangle', pointRadius: 6, pointHoverRadius: 8, borderColor: css('--surface'), borderWidth: 1.5, backgroundColor: css('--s7') },
+        ],
+      },
+      options: baseOptions({
+        yFmt: v => dur(v * 1000),
+        tooltipLabel: ctx => {
+          const b = buckets[ctx.dataIndex]
+          if (ctx.datasetIndex === 1) return ` MCP: ${Object.entries(b.mcp).sort((x, y) => y[1] - x[1]).map(([s, n]) => `${s} ×${n}`).join(', ')}`
+          return ` Avg ${dur(ctx.raw * 1000)} over ${b.dk} turn${b.dk === 1 ? '' : 's'}`
+        },
+      }),
+    })
+  }
+
+  // 2. tokens over time
+  {
+    const controls = el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: state.cacheReads, onchange: e => { state.cacheReads = e.target.checked; render() } }), 'Cache reads')
+    const { card: c, box } = card('Tokens', per, { controls })
+    grid.append(c)
+    const kinds = [['Fresh input', 'inp', 's1'], ['Cache writes', 'cw', 's2'], ['Cache reads', 'cr', 's3'], ['Output', 'out', 's4']]
+      .filter(k => state.cacheReads || k[1] !== 'cr')
+    addChart(box, {
+      type: 'bar',
+      data: { labels, datasets: kinds.map(([label, key, slot]) => barDataset(label, buckets.map(b => b[key]), css('--' + slot))) },
+      options: baseOptions({ stacked: true, yFmt: v => tokens(v), tooltipLabel: ctx => ` ${ctx.dataset.label}: ${tokens(ctx.raw)}` }),
+    })
+  }
+
+  // 3. cost over time, by project (all) or by model family (one project)
+  {
+    const { card: c, box } = card(proj ? 'Cost by model' : 'Cost by project', per)
+    grid.append(c)
+    let datasets
+    if (!proj) {
+      const shown = PROJECT_SLOTS.order.filter(p => PROJECT_SLOTS.slots[p] && buckets.some(b => b.projects[p] > 0))
+      datasets = shown.map(p => barDataset(PROJECTS[p]?.label ?? p, buckets.map(b => b.projects[p] ?? 0), css('--' + PROJECT_SLOTS.slots[p])))
+      const other = buckets.map(b => Object.entries(b.projects).filter(([p]) => !PROJECT_SLOTS.slots[p]).reduce((a, [, v]) => a + v, 0))
+      if (other.some(v => v > 0)) datasets.push(barDataset('Other projects', other, css('--other')))
+    } else {
+      datasets = familySeries(buckets, 'cost').map(f => barDataset(f.label, f.data, f.color))
+    }
+    addChart(box, { type: 'bar', data: { labels, datasets }, options: baseOptions({ stacked: true, yFmt: v => money(v), tooltipLabel: ctx => ` ${ctx.dataset.label}: ${money(ctx.raw)}` }) })
+  }
+
+  // 4. model mix over time (share) + totals table
+  {
+    const controls = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      seg([['family', 'Family'], ['model', 'Model']], state.mixLevel, v => { state.mixLevel = v; render() }),
+      seg([['cost', 'By cost'], ['tokens', 'By tokens']], state.mixBy, v => { state.mixBy = v; render() }))
+    const box = el('div', { class: 'chart-box tall' })
+    const side = el('div')
+    const body = el('div', { class: 'mix-wrap' }, box, side)
+    const { card: c } = card('Model mix', `share ${per}`, { wide: true, controls, body })
+    grid.append(c)
+    const series = state.mixLevel === 'family' ? familySeries(buckets, state.mixBy) : modelSeries(buckets, state.mixBy)
+    const totals = buckets.map((_, i) => series.reduce((a, s) => a + s.data[i], 0))
+    addChart(box, {
+      type: 'bar',
+      data: { labels, datasets: series.map(s => barDataset(s.label, s.data.map((v, i) => totals[i] > 0 ? (v / totals[i]) * 100 : null), s.color)) },
+      options: baseOptions({
+        stacked: true, max: 100, yFmt: v => `${v}%`,
+        tooltipLabel: ctx => { const raw = series[ctx.datasetIndex].data[ctx.dataIndex]; return ` ${ctx.dataset.label}: ${Math.round(ctx.raw)}% (${state.mixBy === 'cost' ? money(raw) : tokens(raw)})` },
+        tooltipFilter: item => item.raw !== null && item.raw > 0,
+      }),
+    })
+    // totals for the whole period, every model
+    const rows = Object.entries(total.models).sort((a, b) => b[1].cost - a[1].cost)
+    const sumCost = rows.reduce((a, [, v]) => a + v.cost, 0)
+    const sumTok = rows.reduce((a, [, v]) => a + v.tokens, 0)
+    side.append(el('table', { class: 'mini' }, el('tbody', {}, rows.map(([m, v]) => {
+      const color = state.mixLevel === 'family' ? familyColor(family(m)) : modelColor(m)
+      return el('tr', { class: 'static' },
+        el('td', {}, el('span', { class: 'sw', style: `background:${color}` }), prettyModel(m)),
+        el('td', { class: 'r num' }, money(v.cost)),
+        el('td', { class: 'r num muted' }, state.mixBy === 'cost' ? pct(sumCost ? (v.cost / sumCost) * 100 : null) : pct(sumTok ? (v.tokens / sumTok) * 100 : null)))
+    }))))
+  }
+
+  // 5. cache hit
+  {
+    const { card: c, box } = card('Cache hit rate', `cache reads ÷ all input, ${per}`)
+    grid.append(c)
+    addChart(box, {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Cache hit', data: buckets.map(b => cacheHit(b)), borderColor: css('--s3'), backgroundColor: css('--s3'), borderWidth: 2, pointRadius: 2.5, tension: 0.25, spanGaps: true }] },
+      options: baseOptions({ legend: false, max: 100, yFmt: v => `${v}%`, tooltipLabel: ctx => ` ${pct(ctx.raw)} cached` }),
+    })
+  }
+
+  // 6. activity
+  {
+    const { card: c, box } = card('Activity', `turns ${per}`)
+    grid.append(c)
+    addChart(box, {
+      type: 'bar',
+      data: { labels, datasets: [barDataset('Turns', buckets.map(b => b.k), css('--s1'))] },
+      options: baseOptions({ legend: false, tooltipLabel: ctx => { const b = buckets[ctx.dataIndex]; return ` ${b.k} turns in ${b.sessions.size} session${b.sessions.size === 1 ? '' : 's'}, ${b.n} tool calls` } }),
+    })
+  }
+
+  // tools legend
+  main.append(renderToolsLegend(sessions, start))
+  // sessions
+  main.append(renderSessionsTable(sessions, start))
+}
+
+function familyColor(f) { return FAMILY_SLOT[f] ? css('--' + FAMILY_SLOT[f]) : css('--other') }
+function modelColor(m) { const s = MODEL_SLOTS.slots[m]; return s ? css('--' + s) : css('--other') }
+
+function familySeries(buckets, by) {
+  const present = new Set()
+  for (const b of buckets) for (const m of Object.keys(b.models)) present.add(family(m))
+  return FAMILY_ORDER.filter(f => present.has(f)).map(f => ({
+    label: f, color: familyColor(f),
+    data: buckets.map(b => Object.entries(b.models).filter(([m]) => family(m) === f).reduce((a, [, v]) => a + v[by], 0)),
+  }))
+}
+function modelSeries(buckets, by) {
+  const present = new Set()
+  for (const b of buckets) for (const m of Object.keys(b.models)) present.add(m)
+  const named = MODEL_SLOTS.order.filter(m => MODEL_SLOTS.slots[m] && present.has(m))
+  const series = named.map(m => ({ label: prettyModel(m), color: modelColor(m), data: buckets.map(b => b.models[m]?.[by] ?? 0) }))
+  const rest = [...present].filter(m => !MODEL_SLOTS.slots[m])
+  if (rest.length) series.push({ label: 'Other models', color: css('--other'), data: buckets.map(b => rest.reduce((a, m) => a + (b.models[m]?.[by] ?? 0), 0)) })
+  return series
+}
+
+// ---------------------------------------------------------------- tools legend
+function renderToolsLegend(sessions, start) {
+  const used = { addon: {}, mcp: {}, skill: {}, agent: {} }
+  const connected = new Set()
+  for (const s of sessions) {
+    let inRange = false
+    for (const u of s.units) {
+      if (u.s < start) continue
+      inRange = true
+      for (const [srv, c] of Object.entries(u.mcp ?? {})) if (state.builtin || !isBuiltin(srv)) used.mcp[srv] = (used.mcp[srv] ?? 0) + c
+      for (const [sk, c] of Object.entries(u.sk ?? {})) used.skill[sk] = (used.skill[sk] ?? 0) + c
+    }
+    if (!inRange) continue
+    for (const a of s.addons ?? []) used.addon[a] = (used.addon[a] ?? 0) + 1
+    for (const [a, c] of Object.entries(s.agents ?? {})) used.agent[a] = (used.agent[a] ?? 0) + c
+    for (const srv of s.mcpConnected ?? []) if (state.builtin || !isBuiltin(srv)) connected.add(srv)
+  }
+  const addonLabel = id => (DATA.addons ?? []).find(a => a.id === id)?.label ?? id
+  const chip = (kind, name, count, unitWord, idle, color) => {
+    const on = state.tool && state.tool.kind === kind && state.tool.name === name
+    return el('button', {
+      class: 'chip' + (on ? ' on' : '') + (idle ? ' idle' : ''),
+      title: idle ? `${name}: connected, not used in this period` : `Show only sessions that used ${name}`,
+      onclick: () => go({ tool: on ? null : { kind, name } }),
+    }, color ? el('span', { class: 'dot', style: `background:${color}` }) : null, kind === 'addon' ? addonLabel(name) : name,
+      idle ? el('span', { class: 'c' }, 'idle') : el('span', { class: 'c num' }, `${count}${unitWord}`))
+  }
+  const groups = []
+  const sorted = o => Object.entries(o).sort((a, b) => b[1] - a[1])
+  if (Object.keys(used.addon).length) groups.push(['Add-ons', sorted(used.addon).map(([n, c]) => chip('addon', n, c, ' sess.', false, css('--s3')))])
+  const mcpChips = sorted(used.mcp).map(([n, c]) => chip('mcp', n, c, ' calls', false, css('--s7')))
+  for (const srv of connected) if (!used.mcp[srv]) mcpChips.push(chip('mcp', srv, 0, '', true, css('--s7')))
+  if (mcpChips.length) groups.push(['MCP servers', mcpChips])
+  if (Object.keys(used.skill).length) groups.push(['Skills', sorted(used.skill).map(([n, c]) => chip('skill', n, c, '×'))])
+  if (Object.keys(used.agent).length) groups.push(['Subagents', sorted(used.agent).map(([n, c]) => chip('agent', n, c, '×'))])
+
+  const body = groups.length
+    ? el('div', { class: 'legend-groups' }, groups.map(([title, chips]) => el('div', { class: 'legend-group' }, el('span', { class: 'lg-title' }, title), chips)))
+    : el('div', { class: 'empty', style: 'padding:12px 0' }, 'No MCP servers, skills, subagents or add-ons in this period.')
+  return el('section', { class: 'card', style: 'margin-top:14px' },
+    el('div', { class: 'card-head' }, el('h3', {}, 'Tools & add-ons'), el('span', { class: 'note' }, 'click one to see only the sessions that used it')), body)
+}
+
+// ---------------------------------------------------------------- sessions table
+function sessionRow(s, start) {
+  const a = acc()
+  for (const u of s.units) if (u.s >= start) addUnit(a, u, s.p)
+  return { s, a, last: s.last ?? 0, turns: a.k, avg: avgTurn(a), cost: a.cost, tokens: totalTokens(a), hit: cacheHit(a) }
+}
+
+function renderSessionsTable(sessions, start) {
+  const q = state.search.trim().toLowerCase()
+  // each project's whole cost in the period (every session, whatever the filters)
+  const projectCost = {}
+  for (const s of SESSIONS) {
+    if (state.project && s.p !== state.project) continue
+    for (const u of s.units) if (u.s >= start) for (const a of Object.values(u.m)) projectCost[s.p] = (projectCost[s.p] ?? 0) + (a[5] ?? 0)
+  }
+  let rows = sessions.map(s => sessionRow(s, start)).filter(r => r.turns > 0)
+  for (const r of rows) r.share = projectCost[r.s.p] > 0 ? (r.cost / projectCost[r.s.p]) * 100 : null
+  if (q) rows = rows.filter(r => `${r.s.title ?? ''} ${PROJECTS[r.s.p]?.label ?? ''} ${r.s.id}`.toLowerCase().includes(q))
+  const { key, dir } = state.sort
+  const val = r => key === 'title' ? (r.s.title ?? '').toLowerCase() : key === 'project' ? (PROJECTS[r.s.p]?.label ?? '').toLowerCase() : (r[key] ?? -1)
+  rows.sort((x, y) => (val(x) < val(y) ? -1 : val(x) > val(y) ? 1 : 0) * dir)
+
+  const th = (k, label, right) => el('th', {
+    class: right ? 'r' : null, scope: 'col',
+    onclick: () => { state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === 'title' || k === 'project' ? 1 : -1) }; render() },
+  }, label, state.sort.key === k ? el('span', { class: 'arrow' }, state.sort.dir > 0 ? ' ↑' : ' ↓') : null)
+
+  const showProject = !state.project
+  const shown = rows.slice(0, state.limit)
+  const body = el('tbody', {}, shown.map(r => {
+    const s = r.s
+    const mixTotal = Object.values(r.a.models).reduce((a, v) => a + v.cost, 0)
+    const fams = {}
+    for (const [m, v] of Object.entries(r.a.models)) fams[family(m)] = (fams[family(m)] ?? 0) + v.cost
+    const mix = el('div', { class: 'bar', title: Object.entries(r.a.models).sort((a, b) => b[1].cost - a[1].cost).map(([m, v]) => `${prettyModel(m)} ${pct(mixTotal ? (v.cost / mixTotal) * 100 : 0)}`).join(' · ') },
+      FAMILY_ORDER.filter(f => fams[f] > 0).map(f => el('span', { style: `width:${(fams[f] / mixTotal) * 100}%;background:${familyColor(f)}` })))
+    const tags = []
+    for (const a of s.addons ?? []) tags.push(el('span', { class: 'tag addon' }, (DATA.addons ?? []).find(x => x.id === a)?.label ?? a))
+    for (const srv of Object.keys(s.mcp ?? {}).filter(x => state.builtin || !isBuiltin(x))) tags.push(el('span', { class: 'tag mcp' }, srv))
+    for (const sk of Object.keys(s.skills ?? {})) tags.push(el('span', { class: 'tag' }, sk))
+    const extra = tags.length > 4 ? el('span', { class: 'muted' }, ` +${tags.length - 4}`) : null
+    return el('tr', { tabindex: '0', onclick: () => go({ session: s.id, project: s.p }), onkeydown: e => { if (e.key === 'Enter') go({ session: s.id, project: s.p }) } },
+      el('td', {}, el('div', { class: 's-title', title: s.title ?? s.id }, s.title ?? `Session ${s.id.slice(0, 8)}`),
+        el('div', { class: 's-sub' }, showProject ? `${PROJECTS[s.p]?.label ?? '—'} · ` : '', fmtDateTime(s.first ?? s.last))),
+      el('td', { class: 'num' }, ago(r.last)),
+      el('td', { class: 'r num' }, String(r.turns)),
+      el('td', { class: 'r num' }, dur(r.avg)),
+      el('td', { class: 'r num' }, money(r.cost)),
+      el('td', { class: 'r num', title: `${pct(r.share)} of ${PROJECTS[s.p]?.label ?? 'the project'}'s cost in this period` },
+        el('div', { class: 'share' }, el('span', { class: 'meter' }, el('span', { style: `width:${Math.min(100, r.share ?? 0)}%` })), pct(r.share))),
+      el('td', { class: 'r num' }, tokens(r.tokens)),
+      el('td', { class: 'r num' }, pct(r.hit)),
+      el('td', {}, mix),
+      el('td', {}, tags.slice(0, 4), extra))
+  }))
+  const table = el('table', { class: 'data' },
+    el('thead', {}, el('tr', {}, th('title', 'Session'), th('last', 'Last active'), th('turns', 'Turns', true), th('avg', 'Avg turn', true),
+      th('cost', 'Cost', true), th('share', 'Of project', true), th('tokens', 'Tokens', true), th('hit', 'Cache hit', true), el('th', { scope: 'col' }, 'Models'), el('th', { scope: 'col' }, 'Tools'))),
+    body)
+  const search = el('input', { class: 'search', type: 'search', placeholder: 'Find a session…', value: state.search, style: 'max-width:260px', 'aria-label': 'Find a session' })
+  search.addEventListener('input', e => {
+    state.search = e.target.value
+    const pos = e.target.selectionStart
+    const fresh = renderSessionsTable(sessions, start)
+    document.getElementById('sessions-card').replaceWith(fresh)
+    const input = fresh.querySelector('input.search')
+    input.focus(); input.setSelectionRange(pos, pos)
+  })
+  const more = rows.length > state.limit
+    ? el('button', { class: 'icon-btn more', onclick: () => { state.limit += 60; render() } }, `Show ${Math.min(60, rows.length - state.limit)} more of ${rows.length - state.limit}`)
+    : null
+  return el('section', { class: 'card', id: 'sessions-card', style: 'margin-top:14px' },
+    el('div', { class: 'card-head' }, el('h3', {}, 'Sessions'), el('span', { class: 'note' }, `${rows.length} in this period · click one to open it`), el('span', { class: 'spacer' }), search),
+    rows.length ? el('div', { class: 'table-wrap' }, table) : el('div', { class: 'empty' }, 'No sessions match.'), more)
+}
+
+// ---------------------------------------------------------------- one session
+function renderSession(main) {
+  const s = BY_ID.get(state.session)
+  if (!s) { main.append(el('div', { class: 'empty' }, 'That session is not in the data. ', el('a', { href: '#' }, 'Back to all projects'))); return }
+  const proj = PROJECTS[s.p] ?? { label: s.p, path: '' }
+  const total = acc()
+  for (const u of s.units) addUnit(total, u, s.p)
+
+  main.append(el('nav', { class: 'crumbs' },
+    el('button', { onclick: () => go({ project: null, session: null }) }, 'All projects'), '›',
+    el('button', { onclick: () => go({ project: s.p, session: null }) }, proj.label), '›',
+    el('span', { class: 'here' }, 'Session')))
+  main.append(el('div', { class: 'title-row' },
+    el('h2', {}, s.title ?? `Session ${s.id.slice(0, 8)}`),
+    el('span', { class: 'sub' }, `${fmtDateTime(s.first ?? s.last)} → ${fmtDateTime(s.last ?? s.first)}${s.ver ? ` · Claude Code ${s.ver}` : ''}${s.ep ? ` · ${s.ep}` : ''}`)))
+  main.append(el('div', { class: 'filters' },
+    el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: state.builtin, onchange: e => { state.builtin = e.target.checked; render() } }), 'Count the app\'s built-in MCP tools'),
+    el('span', { class: 'filter-label' }, s.id)))
+
+  const tile = (k, v, h) => el('div', { class: 'tile' }, el('div', { class: 'k' }, k), el('div', { class: 'v num' }, v), h ? el('div', { class: 'h' }, h) : null)
+  const exact = s.units.filter(u => u.x).length
+  main.append(el('div', { class: 'tiles' },
+    tile('Cost', money(total.cost)),
+    tile('Tokens', tokens(totalTokens(total)), `${tokens(total.out)} written`),
+    tile('Turns', String(total.k), total.ab ? `${total.ab} stopped` : null),
+    tile('Avg turn time', dur(avgTurn(total)), exact ? `${exact} timed by the mod` : 'estimated from the logs'),
+    tile('Cache hit', pct(cacheHit(total))),
+    tile('Tool calls', String(total.n), `${total.mcpTurns} turns used MCP`),
+  ))
+
+  const isDays = s.units.some(u => u.folded)
+  const units = s.units
+  const labels = units.map((u, i) => isDays ? bucketLabel(u.s, 'day') : `#${i + 1}`)
+  const grid = el('div', { class: 'grid' })
+  main.append(grid)
+
+  // turn durations + MCP markers
+  {
+    const { card: c, box } = card(isDays ? 'Average turn time per day' : 'Turn time', isDays ? 'older turns are kept as daily totals' : 'each bar is one turn · ▲ used MCP · grey = stopped', { wide: true })
+    grid.append(c)
+    const vals = units.map(u => (u.dk ? u.d / u.dk : u.raw?.d ?? 0) / 1000)
+    const colors = units.map(u => (u.ab && !u.dk ? css('--other') : css('--s1')))
+    const marks = units.map(u => (Object.keys(u.mcp ?? {}).some(k => state.builtin || !isBuiltin(k)) ? 0 : null))
+    addChart(box, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          barDataset('Turn time', vals, colors, { order: 2 }),
+          { type: 'line', label: 'Used MCP', data: marks, showLine: false, pointStyle: 'triangle', pointRadius: 6, pointHoverRadius: 8, borderColor: css('--surface'), borderWidth: 1.5, backgroundColor: css('--s7'), order: 1 },
+        ],
+      },
+      options: baseOptions({
+        yFmt: v => dur(v * 1000),
+        tooltipLabel: ctx => {
+          const u = units[ctx.dataIndex]
+          if (ctx.datasetIndex === 1) return ` MCP: ${Object.entries(u.mcp).filter(([k]) => state.builtin || !isBuiltin(k)).map(([k, n]) => `${k} ×${n}`).join(', ')}`
+          const when = fmtDateTime(u.s)
+          if (u.folded) return ` ${when}: ${u.k} turns, avg ${dur(u.dk ? u.d / u.dk : null)}`
+          return ` ${when} · ${dur(u.raw.d)}${u.ab ? ' (stopped)' : ''}${u.x ? '' : ' (estimated)'} · ${u.n} tools`
+        },
+      }),
+    })
+  }
+
+  // tokens per turn
+  {
+    const controls = el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: state.cacheReads, onchange: e => { state.cacheReads = e.target.checked; render() } }), 'Cache reads')
+    const { card: c, box } = card(isDays ? 'Tokens per day' : 'Tokens per turn', null, { controls })
+    grid.append(c)
+    const one = units.map(u => { const a = acc(); addUnit(a, u); return a })
+    const kinds = [['Fresh input', 'inp', 's1'], ['Cache writes', 'cw', 's2'], ['Cache reads', 'cr', 's3'], ['Output', 'out', 's4']].filter(k => state.cacheReads || k[1] !== 'cr')
+    addChart(box, {
+      type: 'bar',
+      data: { labels, datasets: kinds.map(([label, key, slot]) => barDataset(label, one.map(a => a[key]), css('--' + slot))) },
+      options: baseOptions({ stacked: true, yFmt: v => tokens(v), tooltipLabel: ctx => ` ${ctx.dataset.label}: ${tokens(ctx.raw)}` }),
+    })
+  }
+
+  // models per turn (cost)
+  {
+    const { card: c, box } = card(isDays ? 'Model mix per day' : 'Models per turn', 'cost by model')
+    grid.append(c)
+    const one = units.map(u => { const a = acc(); addUnit(a, u); return a })
+    const series = modelSeries(one, 'cost')
+    addChart(box, {
+      type: 'bar',
+      data: { labels, datasets: series.map(x => barDataset(x.label, x.data, x.color)) },
+      options: baseOptions({ stacked: true, yFmt: v => money(v), tooltipLabel: ctx => ` ${ctx.dataset.label}: ${money(ctx.raw)}`, tooltipFilter: item => item.raw > 0 }),
+    })
+  }
+
+  main.append(renderToolsLegendForSession(s))
+
+  // turns table
+  const rows = units.map((u, i) => {
+    const a = acc(); addUnit(a, u)
+    const models = Object.keys(u.m).map(prettyModel).join(', ')
+    const mcp = Object.entries(u.mcp ?? {}).filter(([k]) => state.builtin || !isBuiltin(k))
+    return el('tr', { class: 'static' },
+      el('td', { class: 'num' }, isDays ? bucketLabel(u.s, 'day') : `#${i + 1}`),
+      el('td', { class: 'num' }, fmtDateTime(u.s)),
+      el('td', { class: 'r num' }, u.folded ? `${u.k} turns, avg ${dur(u.dk ? u.d / u.dk : null)}` : [dur(u.raw.d), u.ab ? el('span', { class: 'est' }, ' stopped') : u.x ? null : el('span', { class: 'est' }, ' est.')]),
+      el('td', { class: 'r num' }, String(u.n || 0)),
+      el('td', {}, mcp.map(([k, n]) => el('span', { class: 'tag mcp' }, `${k} ×${n}`)), Object.keys(u.sk ?? {}).map(k => el('span', { class: 'tag' }, k))),
+      el('td', {}, models),
+      el('td', { class: 'r num' }, tokens(totalTokens(a))),
+      el('td', { class: 'r num' }, pct(cacheHit(a))),
+      el('td', { class: 'r num' }, money(a.cost)))
+  })
+  main.append(el('section', { class: 'card', style: 'margin-top:14px' },
+    el('div', { class: 'card-head' }, el('h3', {}, isDays ? 'Days' : 'Turns'), el('span', { class: 'note' }, 'est. = time read from the logs; the mod times turns exactly from now on')),
+    el('div', { class: 'table-wrap' }, el('table', { class: 'data' },
+      el('thead', {}, el('tr', {}, ['', 'Started', 'Time', 'Tools', 'MCP & skills', 'Model', 'Tokens', 'Cache hit', 'Cost'].map((h, i) => el('th', { class: [2, 3, 6, 7, 8].includes(i) ? 'r' : null, scope: 'col', style: 'cursor:default' }, h)))),
+      el('tbody', {}, rows)))))
+}
+
+function renderToolsLegendForSession(s) {
+  const groups = []
+  const chipList = (o, cls) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([n, c]) => el('span', { class: 'tag ' + (cls ?? '') }, `${n} ×${c}`))
+  const addons = (s.addons ?? []).map(a => el('span', { class: 'tag addon' }, (DATA.addons ?? []).find(x => x.id === a)?.label ?? a))
+  if (addons.length) groups.push(['Add-ons', addons])
+  const mcp = Object.fromEntries(Object.entries(s.mcp ?? {}).filter(([k]) => state.builtin || !isBuiltin(k)))
+  const mcpTags = chipList(mcp, 'mcp')
+  for (const srv of s.mcpConnected ?? []) if (!mcp[srv] && (state.builtin || !isBuiltin(srv))) mcpTags.push(el('span', { class: 'tag mcp muted' }, `${srv} (idle)`))
+  if (mcpTags.length) groups.push(['MCP servers', mcpTags])
+  if (Object.keys(s.skills ?? {}).length) groups.push(['Skills', chipList(s.skills)])
+  if (Object.keys(s.agents ?? {}).length) groups.push(['Subagents', chipList(s.agents)])
+  const top = Object.entries(s.tools ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 12)
+  if (top.length) groups.push(['Top tools', top.map(([n, c]) => el('span', { class: 'tag' }, `${n} ×${c}`))])
+  return el('section', { class: 'card', style: 'margin-top:14px' },
+    el('div', { class: 'card-head' }, el('h3', {}, 'Tools & add-ons')),
+    groups.length ? el('div', { class: 'legend-groups' }, groups.map(([t, chips]) => el('div', { class: 'legend-group' }, el('span', { class: 'lg-title' }, t), chips)))
+      : el('div', { class: 'empty', style: 'padding:12px 0' }, 'No tools used.'))
+}
+
+// ---------------------------------------------------------------- render
+// Redraws the page in place: the scroll position (page and sidebar) is kept,
+// so a click on a filter or toggle doesn't throw you back to the top.
+function render() {
+  const pageY = window.scrollY
+  const side = document.querySelector('aside.side')
+  const sideY = side.scrollTop
+  const main = document.getElementById('main')
+  main.style.minHeight = `${main.offsetHeight}px` // hold the height while it refills
+  clearCharts()
+  renderSidebar()
+  main.replaceChildren()
+  if (!DATA) main.append(el('div', { class: 'empty' }, 'No data was built into this page. Open it from the ccusage bar’s Dashboard button.'))
+  else if (state.session) renderSession(main)
+  else renderOverview(main)
+  main.style.minHeight = ''
+  side.scrollTop = sideY
+  window.scrollTo({ top: pageY, behavior: 'instant' })
+}
+
+// theme toggle: light ↔ dark over the OS setting, remembered per browser
+function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme') }
+try { applyTheme(localStorage.getItem('ccm-theme')) } catch { }
+document.getElementById('theme').addEventListener('click', () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches)
+  const next = dark ? 'light' : 'dark'
+  applyTheme(next)
+  try { localStorage.setItem('ccm-theme', next) } catch { }
+  render()
+})
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render)
+
+if (DATA) document.getElementById('meta').textContent =
+  `Built ${fmtDateTime(DATA.builtAt)} · ${SESSIONS.length} sessions · press 📊 Dashboard in the bar to update`
+readHash()
+render()
+</script>
+</body>
+</html>

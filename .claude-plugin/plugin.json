@@ -1,6 +1,6 @@
 {
   "name": "ccusage-bar",
-  "version": "0.2.2",
-  "description": "A clean ccusage bar above the prompt: session, project and last-turn costs, tokens, cache hit, cache countdown, context, model mix and average turn time, with Tally, an animated character.",
+  "version": "0.3.0",
+  "description": "A clean ccusage bar above the prompt: session, project and last-turn costs, tokens, cache hit, cache countdown, context, model mix and average turn time, with Tally, an animated character. Records every turn for a local dashboard of all your projects and sessions.",
   "types": "./types/index.d.ts"
 }

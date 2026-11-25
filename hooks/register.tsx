@@ -279,6 +279,111 @@ let isWindows = false
 let isRefreshing = false
 let turnStartCost: number | null = null
 let turnTools = 0
+// this turn's MCP servers and skills, by number of calls
+let turnMcp: Record<string, number> = {}
+let turnSkills: Record<string, number> = {}
+
+// ---- the dashboard's turn records --------------------------------------------
+//
+// One file per session under the plugin's data folder, read by
+// dashboard/build.mjs, which merges them with Claude Code's own logs.
+
+let dataDir: string | null = null
+let isBuilding = false
+
+async function saveTurn($: any, turn: LastTurn, u: any, mcp: Record<string, number>, skills: Record<string, number>) {
+  if (!dataDir) return
+  const id = await $.session.id()
+  const file = `${dataDir}/turns/${id}.json`
+  let rec: any = null
+  try { rec = JSON.parse(await $.fs.read(file)) } catch { /* the session's first turn */ }
+  if (!rec || !Array.isArray(rec.turns)) rec = { sessionId: id, cwd: await $.session.cwd(), turns: [] }
+  // MCP servers this session can reach, used or not (for the dashboard's legend)
+  try {
+    const servers = (await $.tool.list())
+      .filter((t: any) => t.mcp)
+      .map((t: any) => String(t.name).split('__')[1] ?? '')
+      .filter(Boolean)
+    rec.mcpConnected = [...new Set([...(rec.mcpConnected ?? []), ...servers])]
+  } catch { /* keep what we had */ }
+  const model = u?.model
+  rec.turns.push({
+    e: turn.endedAt,
+    d: turn.durationMs,
+    ...(turn.isAborted ? { a: 1 } : {}),
+    m: model
+      ? {
+          [model]: [
+            u.input_tokens ?? 0,
+            u.cache_creation_input_tokens ?? 0,
+            u.cache_read_input_tokens ?? 0,
+            u.output_tokens ?? 0,
+            u.ephemeral_1h_input_tokens ?? 0,
+          ],
+        }
+      : {},
+    c: turn.cost,
+    n: turn.tools,
+    ...(Object.keys(mcp).length ? { mcp } : {}),
+    ...(Object.keys(skills).length ? { sk: skills } : {}),
+  })
+  await $.fs.write(file, JSON.stringify(rec))
+}
+
+// Runs dashboard/build.mjs with Node: imports the logs into the store and
+// writes the pages.
+async function runBuilder($: any, extra: string[]) {
+  let env: Record<string, string> = {}
+  try {
+    env = await $.process.hookEnv()
+  } catch {
+    /* the builder falls back to ~/.claude/ccusage-bar */
+  }
+  const argv = ['node', `${$.plugin.root}/dashboard/build.mjs`, '--quiet', ...extra]
+  if (dataDir) argv.push('--data', dataDir)
+  return $.process.run(argv, { env, timeoutMs: 600_000 })
+}
+
+// Once a day, in the background: import the logs into the store, so the
+// history is kept even if nobody opens the dashboard before Claude Code
+// deletes old logs (after 30 days by default).
+const IMPORT_EVERY_MS = 20 * 60 * 60_000
+
+async function importDaily($: any) {
+  const last = Number((await $.store.get('lastImport')) ?? 0)
+  if (Date.now() - last < IMPORT_EVERY_MS || isBuilding) return
+  await $.store.set('lastImport', Date.now()) // claimed first, so two windows don't both run it
+  isBuilding = true
+  try {
+    const ran = await runBuilder($, [])
+    if (ran.exitCode !== 0) await $.store.set('lastImport', last)
+  } finally {
+    isBuilding = false
+  }
+}
+
+// Builds the dashboard page with Node and opens it in the browser.
+async function openDashboard($: any): Promise<string> {
+  if (isBuilding) return 'The dashboard is already being built.'
+  isBuilding = true
+  try {
+    const ran = await runBuilder($, ['--open'])
+    if (ran.exitCode !== 0) {
+      const why = String(ran.stderr || ran.stdout).trim().split('\n').pop() ?? ''
+      return `Dashboard failed: ${why.slice(0, 160)}`
+    }
+    return 'Dashboard opened in your browser.'
+  } catch (err) {
+    return `Dashboard failed: ${err instanceof Error ? err.message : String(err)} (is Node.js installed?)`
+  } finally {
+    isBuilding = false
+  }
+}
+
+async function pressDashboard($: any) {
+  $.ui.toast('Building the dashboard…')
+  $.ui.toast(await openDashboard($))
+}
 
 // ccusage is a Node CLI; on Windows its npm shim is a .cmd, which only cmd.exe runs.
 async function ccusage($: any, args: string[]) {
@@ -341,13 +446,19 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     // before the first prompt, so a turn can't finish ahead of the restore
     await restoreStats($).catch(() => {})
+    try {
+      dataDir = (await $.process.hookEnv()).CLAUDE_PLUGIN_DATA ?? null
+    } catch {
+      dataDir = null // no data folder: the bar works, the dashboard gets only the logs
+    }
     isWindows = (await $.session.machine()).sysname === 'Windows_NT'
     $.command.register({
       name: 'ccusage-bar',
-      description: 'ccusage bar: show | hide | refresh',
+      description: 'ccusage bar: show | hide | refresh | dashboard',
     })
     void refresh($)
     $.clock.every(REFRESH_MS, () => void refresh($))
+    void importDaily($).catch(() => {}) // never holds up the session
     return next(e)
   })
 
@@ -356,11 +467,21 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     turnStartCost = (await $.session.usage()).cost?.usd ?? null
     turnTools = 0
+    turnMcp = {}
+    turnSkills = {}
     return next(e)
   }).catch(($, e, next) => next(e)) // never hold up a prompt over a metric
 
   on('tool.call', ($, e, next) => {
     turnTools += 1
+    const name = String(e.tool)
+    if (name.startsWith('mcp__')) {
+      const server = name.split('__')[1] || 'mcp'
+      turnMcp[server] = (turnMcp[server] ?? 0) + 1
+    } else if (name === 'Skill') {
+      const skill = String((e as any).skill ?? '').replace(/^\//, '')
+      if (skill) turnSkills[skill] = (turnSkills[skill] ?? 0) + 1
+    }
     return next(e)
   }).catch(($, e, next) => next(e)) // nor a tool call
 
@@ -392,6 +513,8 @@ export const register: Register = on => {
       isAborted: e.isAborted,
     }
     await update($, lastTurn, () => turn)
+    // for the dashboard; never fails the turn
+    void saveTurn($, turn, u, turnMcp, turnSkills).catch(() => {})
     // A stopped turn was cut short, so it would drag the average down.
     if (!e.isAborted) {
       let stats: TurnStats | null = null
@@ -407,6 +530,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'ccusage-bar' }, async ($, e, next) => {
     const arg = String(e.args ?? '').trim().toLowerCase()
+    if (arg === 'dashboard') return { text: await openDashboard($) }
     if (arg === 'hide') {
       await update($, isHidden, () => true)
       return { text: 'ccusage bar hidden. Run /ccusage-bar show to bring it back.' }
@@ -507,6 +631,7 @@ export const register: Register = on => {
             label={`[${VIEWS.find(v => v.id === view)?.label ?? 'Session'}]`}
             onPress={() => update($, scope, () => nextView)}
           />
+          <Button key="dashboard" plain label="[dashboard]" onPress={() => pressDashboard($)} />
           {isTurn ? (
             turn === null ? (
               <Text dimColor>last turn fills in after your next message</Text>
@@ -601,6 +726,9 @@ export const register: Register = on => {
             <Text size="body" weight="semibold">ccusage</Text>
             <Svg source={check(headline.color, headline.ok)} alt={headline.text} width={14} height={14} />
             <Text size="body" dimColor>{headline.text}</Text>
+            {/* Tally itself can't take a click in this build, so the way in sits beside it */}
+            <Text size="body" dimColor>·</Text>
+            <Button key="dashboard" plain dimColor label="📊 Dashboard" onPress={() => pressDashboard($)} />
             <Box flexGrow={1} />
             {/* each view's price sits beside its button */}
             {VIEWS.flatMap((v, i) => [
