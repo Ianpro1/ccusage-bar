@@ -8,13 +8,43 @@ const isHidden = atom({ plugin: 'ccusage-bar', key: 'isHidden' } as const, false
 const scope = atom({ plugin: 'ccusage-bar', key: 'scope' } as const, 'session' as 'session' | 'project' | 'turn')
 const lastTurn = atom({ plugin: 'ccusage-bar', key: 'lastTurn' } as const, null as LastTurn | null)
 const showCosts = atom({ plugin: 'ccusage-bar', key: 'costsOpen' } as const, true)
-// Turn timing for this session; $.state keeps it across mod reloads.
+// Turn timing for this session. $.state keeps it across mod reloads only;
+// $.store (below) keeps it across restarts, so a resumed session gets it back.
 const turnStats = atom(
   { plugin: 'ccusage-bar', key: 'turnStats' } as const,
   { count: 0, totalMs: 0 } as TurnStats,
 )
 
 const REFRESH_MS = 60_000
+
+// $.store is shared by every session, so the totals sit in one map keyed by
+// session id; past STATS_KEEP sessions the least recently used are dropped.
+const STATS_KEY = 'turnStats'
+const STATS_KEEP = 50
+type SavedStats = Record<string, TurnStats & { at: number }>
+
+async function loadSavedStats($: any): Promise<SavedStats> {
+  const v = await $.store.get(STATS_KEY)
+  return v && typeof v === 'object' ? (v as SavedStats) : {}
+}
+
+async function saveStats($: any, stats: TurnStats) {
+  const id = await $.session.id()
+  const all = await loadSavedStats($)
+  all[id] = { count: stats.count, totalMs: stats.totalMs, at: Date.now() }
+  const kept = Object.entries(all).sort((a, b) => b[1].at - a[1].at).slice(0, STATS_KEEP)
+  await $.store.set(STATS_KEY, Object.fromEntries(kept))
+}
+
+// At start: take the saved totals when they hold more turns than $.state does
+// (a fresh process starts at zero; a hot reload already has them).
+async function restoreStats($: any) {
+  const saved = (await loadSavedStats($))[await $.session.id()]
+  if (!saved || !(saved.count > 0)) return
+  await update($, turnStats, prev =>
+    (prev?.count ?? 0) >= saved.count ? prev : { count: saved.count, totalMs: saved.totalMs },
+  )
+}
 
 // Status colors that read on both light and dark backgrounds.
 const GREEN = '#2fa36b'
@@ -309,6 +339,8 @@ async function refresh($: any) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    // before the first prompt, so a turn can't finish ahead of the restore
+    await restoreStats($).catch(() => {})
     isWindows = (await $.session.machine()).sysname === 'Windows_NT'
     $.command.register({
       name: 'ccusage-bar',
@@ -362,10 +394,12 @@ export const register: Register = on => {
     await update($, lastTurn, () => turn)
     // A stopped turn was cut short, so it would drag the average down.
     if (!e.isAborted) {
-      await update($, turnStats, prev => ({
+      let stats: TurnStats | null = null
+      await update($, turnStats, prev => (stats = {
         count: (prev?.count ?? 0) + 1,
         totalMs: (prev?.totalMs ?? 0) + e.durationMs,
       }))
+      if (stats) await saveStats($, stats).catch(() => {}) // a metric never fails the turn
     }
     void refresh($)
     return result

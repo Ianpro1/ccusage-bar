@@ -22,7 +22,7 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 - **cache hit:** the share of input served from the prompt cache, which costs about a tenth of normal input. Higher is better.
 - **cache:** time left before the prompt cache expires (1 hour on subscriptions, 5 minutes on the API). Your next message after it runs out pays full price to re-read the conversation.
 - **context:** how full the context window is. Near 100%, Claude Code compacts the conversation.
-- **avg turn:** how long Claude works on a prompt in this session, on average (stopped turns left out). Not shown in Project view.
+- **avg turn:** how long Claude works on a prompt in this session, on average (stopped turns left out). It's kept when you exit and resume the session. Not shown in Project view.
 
 **Bottom row** (open by default; the ▴ / ▾ arrow at the end of the header hides and shows it)
 - **of project / sessions:** this session's share of the project's cost, or the project's session count.
