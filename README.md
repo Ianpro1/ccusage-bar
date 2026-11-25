@@ -2,9 +2,9 @@
 
 A clean usage bar above the prompt in Claude Code, powered by [ccusage](https://github.com/ryoppippi/ccusage).
 
-It shows what your Claude Code sessions cost and how they use tokens, for this session, this project folder, or just the last turn, with a small animated character, Tally, that reacts to how full your context is.
+It shows what your Claude Code sessions cost and how they use tokens, for this session, this project folder, or just the last turn.
 
-![The ccusage bar in the Claude desktop app, with Tally animating while Claude works](assets/ccusage-bar.gif)
+![The ccusage bar in the Claude desktop app, while Claude works](assets/ccusage-bar.gif)
 
 <details>
 <summary>Still screenshot</summary>
@@ -30,8 +30,6 @@ It shows what your Claude Code sessions cost and how they use tokens, for this s
 - **today:** everything since midnight, across all projects.
 
 **Last turn view:** the top row shows how long the turn took, how many tool calls it made, the tokens it read (in) and wrote (out), and its cache hit rate; the bottom row shows its share of the session's cost, its model, today, and the average turn time.
-
-**Tally**, the character, bobs and blinks normally, turns worried at 70% context and alarmed at 85%, and looks busy while Claude is working.
 
 All costs are estimates from your local logs; your bill is the authority.
 
@@ -70,7 +68,7 @@ How it gets its data:
 
 ## Requirements
 
-- Claude Code with mod support. The full bar with gauges and Tally draws in the Claude desktop app; terminals get a compact text line.
+- Claude Code with mod support. The full bar with gauges draws in the Claude desktop app; terminals get a compact text line.
 - [ccusage](https://github.com/ryoppippi/ccusage) installed and on your PATH:
 
   ```
@@ -106,4 +104,4 @@ In the desktop app, where `/plugin` does not run: click **+** next to the prompt
 
 ## Credits
 
-Built with Claude Code. Usage figures come from ccusage by ryoppippi. The layout is inspired by the status bar of [token-optimizer](https://github.com/alexgreensh/token-optimizer); the code and the Tally character are original.
+Built with Claude Code. Usage figures come from ccusage by ryoppippi. The layout is inspired by the status bar of [token-optimizer](https://github.com/alexgreensh/token-optimizer); the code is original.

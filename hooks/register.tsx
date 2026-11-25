@@ -52,7 +52,7 @@ const YELLOW = '#d9a000'
 const ORANGE = '#e8742a'
 const RED = '#e5484d'
 const TRACK = 'rgba(128,128,128,0.28)'
-// view button prices: Tally's orange, so they stand out from the names
+// view button prices: Claude orange, so they stand out from the names
 // (the button's own dimming still marks which view is not selected)
 const PRICE_COLOR = '#d97757'
 
@@ -188,90 +188,6 @@ const check = (color: string, isOk: boolean) =>
  stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
 <circle cx="8" cy="8" r="6.5"/>${isOk ? '<path d="M5.2 8.2l1.9 1.9 3.7-3.9"/>' : '<path d="M8 4.8v3.8"/><path d="M8 11.1v.1"/>'}
 </svg>`
-
-// ---- the mascot: "Tally", an original little meter creature ----------------
-//
-// A rounded body with a three-bar gauge on its belly, two eyes
-// and stubby feet, animated with SMIL (runs in the desktop's SVG image):
-//   calm     bobs gently and blinks every few seconds
-//   worried  (context 70%+) orange, flat mouth, quicker bob
-//   alarmed  (context 85%+) red, open mouth, shivers
-//   working  (Claude is mid-turn) eyes scan, gauge bars bounce,
-//            feet shuffle
-type Mood = 'calm' | 'worried' | 'alarmed'
-
-const MOOD_COLOR: Record<Mood, string> = { calm: '#d97757', worried: ORANGE, alarmed: RED }
-
-function mascot(mood: Mood, isWorking: boolean) {
-  const body = MOOD_COLOR[mood]
-  const dark = '#2b2320'
-
-  // whole-body motion
-  const motion =
-    mood === 'alarmed'
-      ? `<animateTransform attributeName="transform" type="translate" dur="0.9s" repeatCount="indefinite"
-          values="0 0;-0.7 0;0.7 0;-0.7 0;0 0;0 0" keyTimes="0;0.1;0.2;0.3;0.4;1"/>`
-      : `<animateTransform attributeName="transform" type="translate" repeatCount="indefinite"
-          dur="${mood === 'worried' || isWorking ? '1.2s' : '2.6s'}" values="0 0;0 -1.4;0 0"
-          keyTimes="0;0.5;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1"/>`
-
-  // eyes: whites blink; pupils scan while working
-  const blink = `<animate attributeName="ry" dur="4.2s" repeatCount="indefinite"
-      values="2.7;2.7;0.25;2.7" keyTimes="0;0.93;0.96;1"/>`
-  const pupilBlink = `<animate attributeName="r" dur="4.2s" repeatCount="indefinite"
-      values="1.25;1.25;0;1.25" keyTimes="0;0.93;0.96;1"/>`
-  const scan = isWorking
-    ? `<animateTransform attributeName="transform" type="translate" dur="1.6s" repeatCount="indefinite"
-        values="-0.9 0;0.9 0;-0.9 0"/>`
-    : ''
-  const eye = (cx: number) => `
-    <ellipse cx="${cx}" cy="13.5" rx="2.4" ry="2.7" fill="#fff">${blink}</ellipse>
-    <g>${scan}<circle cx="${cx + 0.3}" cy="13.9" r="1.25" fill="${dark}">${pupilBlink}</circle></g>`
-
-  const brows =
-    mood === 'calm'
-      ? ''
-      : `<path d="M10.3 9.6 L14.3 ${mood === 'alarmed' ? 10.9 : 10.3}" stroke="${dark}" stroke-width="1" stroke-linecap="round"/>
-         <path d="M23.7 9.6 L19.7 ${mood === 'alarmed' ? 10.9 : 10.3}" stroke="${dark}" stroke-width="1" stroke-linecap="round"/>`
-
-  const mouth =
-    mood === 'calm'
-      ? `<path d="M15 18.2 q2 1.6 4 0" stroke="${dark}" stroke-width="1.1" fill="none" stroke-linecap="round"/>`
-      : mood === 'worried'
-        ? `<path d="M15.2 18.9 h3.6" stroke="${dark}" stroke-width="1.1" stroke-linecap="round"/>`
-        : `<ellipse cx="17" cy="19" rx="1.3" ry="1.5" fill="${dark}"/>`
-
-  // the belly gauge: three bars; they bounce while working
-  const bar = (x: number, h: number, i: number) => {
-    const y = 26 - h
-    const bounce = isWorking
-      ? `<animate attributeName="height" dur="0.9s" begin="${i * 0.15}s" repeatCount="indefinite"
-          values="${h};${h + 1.6};${h}"/>
-         <animate attributeName="y" dur="0.9s" begin="${i * 0.15}s" repeatCount="indefinite"
-          values="${y};${y - 1.6};${y}"/>`
-      : ''
-    return `<rect x="${x}" y="${y}" width="2" height="${h}" rx="0.6" fill="#fff" opacity="${0.65 + i * 0.15}">${bounce}</rect>`
-  }
-
-  const shuffle = (begin: string) =>
-    isWorking
-      ? `<animateTransform attributeName="transform" type="translate" dur="0.5s" begin="${begin}"
-          repeatCount="indefinite" values="0 0;0 -0.8;0 0"/>`
-      : ''
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
-<g>${motion}
-  <rect x="7" y="29" width="5" height="2.6" rx="1.2" fill="${dark}">${shuffle('0s')}</rect>
-  <rect x="22" y="29" width="5" height="2.6" rx="1.2" fill="${dark}">${shuffle('0.25s')}</rect>
-  <rect x="4" y="5.5" width="26" height="24.5" rx="8" fill="${body}"/>
-  <rect x="4" y="5.5" width="26" height="24.5" rx="8" fill="#fff" opacity="0.08"/>
-  ${eye(13)}${eye(21)}
-  ${brows}
-  ${mouth}
-  ${bar(13.5, 2.5, 0)}${bar(16, 4, 1)}${bar(18.5, 5.5, 2)}
-</g>
-</svg>`
-}
 
 // ---- data -----------------------------------------------------------------
 
@@ -727,21 +643,11 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="row" alignItems="center" gap={1}>
-        <Svg
-          source={mascot(
-            ctxPct >= 85 ? 'alarmed' : ctxPct >= 70 || (s.error && s.fetchedAt === 0) ? 'worried' : 'calm',
-            e.props.isWorking,
-          )}
-          alt={e.props.isWorking ? 'Tally is counting' : `Tally: ${headline.text}`}
-          width={34}
-          height={34}
-        />
         <Box flexDirection="column" gap={0} flexGrow={1}>
           <Box key="head" flexDirection="row" alignItems="center" gap={1}>
             <Text size="body" weight="semibold">ccusage</Text>
             <Svg source={check(headline.color, headline.ok)} alt={headline.text} width={14} height={14} />
             <Text size="body" dimColor>{headline.text}</Text>
-            {/* Tally itself can't take a click in this build, so the way in sits beside it */}
             <Text size="body" dimColor>·</Text>
             <Button key="dashboard" plain dimColor label="📊 Dashboard" onPress={() => pressDashboard($)} />
             <Box flexGrow={1} />
