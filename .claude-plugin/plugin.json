@@ -1,6 +1,6 @@
 {
   "name": "ccusage-bar",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A clean ccusage bar above the prompt: session, project and last-turn costs, tokens, cache hit, cache countdown, context, model mix and average turn time. Keeps per-prompt books of all your projects and sessions for comparing add-ons, MCP servers, skills and models, with a local dashboard and project comparison.",
   "types": "./types/index.d.ts"
 }

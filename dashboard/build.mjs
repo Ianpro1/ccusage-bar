@@ -433,6 +433,7 @@ function mergeModTurns(session, rec) {
   }
   for (const s of rec.mcpConnected ?? []) (session.mcpConnected ??= {})[s] = true
   for (const a of rec.addonsPresent ?? []) (session.addonsPresent ??= {})[a] = true
+  for (const p of rec.pluginsEnabled ?? []) (session.pluginsEnabled ??= {})[p] = true
   turns.sort((a, b) => a.s - b.s)
   session.first = turns[0]?.s ?? session.first
   session.last = turns.length ? Math.max(session.last ?? 0, ...turns.map(x => x.s + (x.d ?? 0))) : session.last

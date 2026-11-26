@@ -49,6 +49,7 @@ What the mod records, where it lives, and how to compare things with it
 | `addonsUsed` | Add-ons used this turn (graphify: its skill, a command naming it, or reading/searching `graphify-out`). |
 | `addonsInSession`, `mcpInSession`, `skillsInSession`, `mcpConnected` | What the whole session used, and the MCP servers it could reach. |
 | `addonsAvailable` | Add-ons the project had (folder present at session start, recorded by the mod; or present now). |
+| `pluginsEnabled` | Plugins enabled for the session (by name, e.g. `tokeneconomizer`), read from Claude Code's settings at session start. `null` for sessions from before this was recorded (0.4.2); for those, the plugin's install date is the only clue. |
 | `compactions` | Context compactions during the turn. |
 
 `loadSessions()` gives one row per session with totals. Sessions folded into
@@ -79,6 +80,12 @@ or waste tokens / cost / time".
    about 30 prompts a side, or one project, call it a hint.
 8. **Time trend.** Before/after comparisons also pick up everything else that
    changed (models, tasks). Prefer with/without in the same period.
+
+For a plugin that works in the background through hooks (TokenEconomizer:
+injected repo facts, pruned tools, a failing-loop guard), there are no calls
+to spot: compare on `pluginsEnabled`, and look at `contextTokens`,
+`tokensCacheWrite` on a session's first turn, `toolErrors` and `durationMs`.
+Fair comparisons need sessions with it off, in the same projects and period.
 
 For an add-on, useful measures beyond cost: `tools.Read + tools.Grep +
 tools.Glob` (does it cut file searching?), `tokensTotal`, `contextTokens`,

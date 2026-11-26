@@ -109,6 +109,8 @@ export async function loadTurns({ dataDir, includeBuiltinMcp = false, store } = 
         mcpInSession: Object.keys(s.mcp ?? {}).filter(k => includeBuiltinMcp || !BUILTIN_MCP.test(k)),
         mcpConnected: Object.keys(s.mcpConnected ?? {}).filter(k => includeBuiltinMcp || !BUILTIN_MCP.test(k)),
         skillsInSession: Object.keys(s.skills ?? {}),
+        // null: not known (the session predates plugin tracking, 0.4.2)
+        pluginsEnabled: s.pluginsEnabled ? Object.keys(s.pluginsEnabled) : null,
         compactions: t.cp ?? 0,
       })
       prevEnd = t.s + (t.d ?? 0)
@@ -130,6 +132,7 @@ export async function loadSessions({ dataDir, store } = {}) {
       cost, folded: !!s.days?.length, compactions: s.compactions ?? 0,
       addonsUsed: Object.keys(s.addons ?? {}), addonsAvailable: [...new Set([...Object.keys(s.addonsPresent ?? {}), ...Object.keys(s.projectAddons ?? {})])],
       mcp: s.mcp ?? {}, skills: s.skills ?? {}, agents: s.agents ?? {}, tools: s.tools ?? {},
+      pluginsEnabled: s.pluginsEnabled ? Object.keys(s.pluginsEnabled) : null,
     }
   })
 }

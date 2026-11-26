@@ -213,6 +213,28 @@ let isBuilding = false
 const ADDON_FOLDERS: [string, string][] = [['graphify', 'graphify-out']]
 let addonsPresent: string[] = []
 
+// Every plugin enabled for this session (user settings, then the project's,
+// then its local ones, later ones winning), by name: so any plugin, such as
+// TokenEconomizer, can be compared on and off without a list to keep.
+let pluginsEnabled: string[] = []
+
+async function readEnabledPlugins($: any, cwd: string): Promise<string[]> {
+  if (!dataDir) return []
+  // the data folder is <config dir>/plugins/data/<plugin>
+  const configDir = dataDir.replace(/[\\/]plugins[\\/]data[\\/][^\\/]+[\\/]?$/, '')
+  const files = [`${configDir}/settings.json`, `${cwd}/.claude/settings.json`, `${cwd}/.claude/settings.local.json`]
+  const on: Record<string, boolean> = {}
+  for (const file of files) {
+    try {
+      const settings = JSON.parse(await $.fs.read(file))
+      for (const [id, isOn] of Object.entries(settings?.enabledPlugins ?? {})) on[id] = !!isOn
+    } catch {
+      /* no such file */
+    }
+  }
+  return Object.keys(on).filter(id => on[id]).map(id => id.split('@')[0]!).sort()
+}
+
 async function saveTurn($: any, turn: LastTurn, u: any, mcp: Record<string, number>, skills: Record<string, number>) {
   if (!dataDir) return
   const id = await $.session.id()
@@ -229,6 +251,7 @@ async function saveTurn($: any, turn: LastTurn, u: any, mcp: Record<string, numb
     rec.mcpConnected = [...new Set([...(rec.mcpConnected ?? []), ...servers])]
   } catch { /* keep what we had */ }
   rec.addonsPresent = [...new Set([...(rec.addonsPresent ?? []), ...addonsPresent])]
+  rec.pluginsEnabled = [...new Set([...(rec.pluginsEnabled ?? []), ...pluginsEnabled])]
   const model = u?.model
   rec.turns.push({
     e: turn.endedAt,
@@ -378,6 +401,7 @@ export const register: Register = on => {
       const cwd = await $.session.cwd()
       addonsPresent = []
       for (const [id, folder] of ADDON_FOLDERS) if (await $.fs.exists(`${cwd}/${folder}`)) addonsPresent.push(id)
+      pluginsEnabled = await readEnabledPlugins($, cwd)
     } catch {
       /* unknown; recorded as none */
     }
